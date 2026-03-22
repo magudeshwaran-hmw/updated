@@ -1,0 +1,442 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
+import { Eye, EyeOff, User, Lock, Phone, Mail, Briefcase, MapPin, Clock, Hash, ArrowRight, Loader2 } from 'lucide-react';
+import { useAuth } from '@/lib/authContext';
+import { useDark, mkTheme } from '@/lib/themeContext';
+import { apiRegister, apiLogin, apiGetSkills, isServerAvailable } from '@/lib/api';
+import { createNewEmployee, upsertEmployee, getAllEmployees, saveSkillRatings } from '@/lib/localDB';
+import { SKILLS } from '@/lib/mockData';
+import type { ProficiencyLevel } from '@/lib/types';
+
+type Mode = 'login' | 'signup';
+
+const BG = '/office_bg.png';
+
+function InputRow({
+  label, placeholder, value, onChange, type = 'text',
+  icon: Icon, suffix, dark, T,
+}: {
+  label: string; placeholder: string; value: string;
+  onChange: (v: string) => void; type?: string;
+  icon: React.ElementType; suffix?: React.ReactNode;
+  dark: boolean; T: Record<string, string>;
+}) {
+  const [focused, setFocused] = useState(false);
+  return (
+    <div>
+      <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
+        {label}
+      </label>
+      <div style={{ position: 'relative' }}>
+        <Icon size={15} color={focused ? '#60A5FA' : 'rgba(255,255,255,0.38)'} style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none', zIndex: 1 }} />
+        <input
+          type={type}
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder={placeholder}
+          autoComplete="off"
+          style={{
+            width: '100%', boxSizing: 'border-box',
+            padding: suffix ? '11px 44px 11px 40px' : '11px 14px 11px 40px',
+            borderRadius: '10px', fontSize: '14px',
+            background: focused ? 'rgba(255,255,255,0.14)' : 'rgba(255,255,255,0.08)',
+            border: `1.5px solid ${focused ? 'rgba(96,165,250,0.70)' : 'rgba(255,255,255,0.18)'}`,
+            color: '#fff', outline: 'none',
+            transition: 'border-color 0.2s, background 0.2s',
+          }}
+        />
+        {suffix && (
+          <div style={{ position: 'absolute', right: 12, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer' }}>
+            {suffix}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SelectRow({ label, value, onChange, options, icon: Icon }: {
+  label: string; value: string; onChange: (v: string) => void;
+  options: string[]; icon: React.ElementType;
+}) {
+  return (
+    <div>
+      <label style={{ fontSize: '11px', fontWeight: 700, color: 'rgba(255,255,255,0.55)', letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: '6px', display: 'block' }}>
+        {label}
+      </label>
+      <div style={{ position: 'relative' }}>
+        <Icon size={15} color="rgba(255,255,255,0.38)" style={{ position: 'absolute', left: 13, top: '50%', transform: 'translateY(-50%)', pointerEvents: 'none' }} />
+        <select value={value} onChange={e => onChange(e.target.value)} style={{
+          width: '100%', boxSizing: 'border-box' as const,
+          padding: '11px 14px 11px 40px', borderRadius: '10px', fontSize: '14px',
+          background: 'rgba(255,255,255,0.08)', border: '1.5px solid rgba(255,255,255,0.18)',
+          color: '#fff', outline: 'none', appearance: 'none' as const,
+        }}>
+          {options.map(o => <option key={o} value={o} style={{ background: '#1e293b' }}>{o}</option>)}
+        </select>
+      </div>
+    </div>
+  );
+}
+
+export default function AuthPage() {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const { dark } = useDark();
+  const T = mkTheme(dark);
+
+  const [mode, setMode]       = useState<Mode>('login');
+  const [loading, setLoading] = useState(false);
+  const [showPw, setShowPw]   = useState(false);
+  const [showCPw, setShowCPw] = useState(false);
+
+  // ── Login fields ──────────────────────────────────────────────────────────
+  const [lZensarId, setLZensarId] = useState('');
+  const [lPassword, setLPassword] = useState('');
+
+  // ── Sign-up fields ────────────────────────────────────────────────────────
+  const [sZensarId,    setSZensarId]    = useState('');
+  const [sName,        setSName]        = useState('');
+  const [sMobile,      setSMobile]      = useState('');
+  const [sEmail,       setSEmail]       = useState('');
+  const [sLocation,    setSLocation]    = useState('Pune, Maharashtra');
+  const [sDept,        setSDept]        = useState('Quality Engineering');
+  const [sYearsIT,     setSYearsIT]     = useState('');
+  const [sYearsZensar, setSYearsZensar] = useState('');
+  const [sPassword,    setSPassword]    = useState('');
+  const [sCPassword,   setSCPassword]   = useState('');
+
+  // ── Login ─────────────────────────────────────────────────────────────────
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!lZensarId.trim()) { toast.error('Enter your Zensar ID'); return; }
+    if (!/^\d{6}$/.test(lZensarId.trim())) { toast.error('Zensar ID must be exactly 6 digits'); return; }
+    if (!lPassword)  { toast.error('Enter your password'); return; }
+
+    setLoading(true);
+    const serverUp = await isServerAvailable();
+
+    if (serverUp) {
+      try {
+        const emp = await apiLogin(lZensarId.trim(), lPassword);
+
+        // Build a complete Employee for localStorage so SkillMatrixPage works
+        const existingLocal = getAllEmployees().find(e => e.id === emp.id);
+
+        // ✅ Preserve submitted=true from localStorage even if server hasn't saved it yet
+        // (e.g. Excel was open during submit — local is source of truth in that case)
+        const serverSubmitted = (emp.submitted as string) === 'Yes';
+        const localSubmitted  = existingLocal?.submitted === true;
+        const isSubmitted     = serverSubmitted || localSubmitted;
+
+        upsertEmployee({
+          id:                emp.id,
+          name:              emp.name || '',
+          email:             emp.email || '',
+          phone:             emp.phone || '',
+          designation:       emp.designation || existingLocal?.designation || '',
+          department:        emp.department || 'Quality Engineering',
+          location:          emp.location   || '',
+          yearsIT:           Number(emp.yearsIT ?? 0),
+          yearsZensar:       Number(emp.yearsZensar ?? 0),
+          primarySkill:      emp.primarySkill  || '',
+          primaryDomain:     emp.primaryDomain || '',
+          overallCapability: Number(emp.overallCapability ?? 0),
+          submitted:         isSubmitted,   // combined: server OR local
+          resumeUploaded:    (emp.resumeUploaded as string) === 'Yes',
+          // Keep existing skills from localStorage if already rated, else create fresh
+          skills: existingLocal?.skills?.length
+            ? existingLocal.skills
+            : SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
+        });
+
+        // Sync skills from backend if available
+        try {
+          const skills = await apiGetSkills(emp.id);
+          if (skills.length > 0) {
+            saveSkillRatings(emp.id, skills.map(s => ({
+              skillId: s.skillId,
+              selfRating: s.selfRating as ProficiencyLevel,
+              managerRating: s.managerRating as ProficiencyLevel | null,
+              validated: s.validated,
+            })));
+          }
+        } catch { /* skills not saved yet — OK */ }
+
+        login('employee', emp.id, emp.name || '');
+        toast.success(`Welcome back, ${(emp.name || '').split(' ')[0]}! ✅`);
+        // Always go to report if submitted (server OR local), skills matrix if not
+        navigate(isSubmitted ? '/employee/report' : '/employee/skills');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Login failed');
+      }
+    } else {
+      // Fallback: localStorage — match by ZensarID (stored in designation as "Zensar-XXXXXX"), email, or phone
+      const employees = getAllEmployees();
+      const needle = lZensarId.trim().toLowerCase();
+      const emp = employees.find(e =>
+        e.designation === `Zensar-${lZensarId.trim()}` ||
+        e.designation?.toLowerCase().includes(needle) ||
+        e.email?.toLowerCase() === needle ||
+        e.phone === lZensarId.trim()
+      );
+      if (!emp) {
+        toast.error('Server is offline and no local account found. Please ensure the backend server is running.');
+        setLoading(false);
+        return;
+      }
+      login('employee', emp.id, emp.name);
+      toast.success(`Welcome back, ${emp.name.split(' ')[0]}! ✅`);
+      // If already submitted → go straight to their report
+      navigate(emp.submitted ? '/employee/report' : '/employee/skills');
+    }
+    setLoading(false);
+  };
+
+  // ── Sign up ───────────────────────────────────────────────────────────────
+  const handleSignup = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!sZensarId.trim() || !/^\d{6}$/.test(sZensarId.trim())) { toast.error('Zensar ID must be exactly 6 digits'); return; }
+    if (!sName.trim())    { toast.error('Enter your full name'); return; }
+    if (!sMobile.trim())  { toast.error('Enter your mobile number'); return; }
+    if (!sEmail.trim())   { toast.error('Enter your Zensar email'); return; }
+    if (!sPassword)       { toast.error('Create a password'); return; }
+    if (sPassword.length < 6) { toast.error('Password must be at least 6 characters'); return; }
+    if (sPassword !== sCPassword) { toast.error('Passwords do not match'); return; }
+
+    setLoading(true);
+    const serverUp = await isServerAvailable();
+
+    if (serverUp) {
+      try {
+        const emp = await apiRegister({
+          name: sName.trim(),
+          email: sEmail.trim(),
+          phone: sMobile.trim(),
+          designation: sEmail.trim().split('@')[0] || 'Employee',
+          department: sDept,
+          location: sLocation,
+          yearsIT: parseFloat(sYearsIT) || 0,
+          yearsZensar: parseFloat(sYearsZensar) || 0,
+          password: sPassword,
+          resumeUploaded: false,
+          zensarId: sZensarId.trim(),
+        } as Parameters<typeof apiRegister>[0] & { zensarId: string });
+
+        // ✅ Mirror to localStorage so login works even if server has a blip later
+        upsertEmployee({
+          id:                emp.id,
+          name:              sName.trim(),
+          email:             sEmail.trim(),
+          phone:             sMobile.trim(),
+          designation:       `Zensar-${sZensarId.trim()}`, // store ZensarID so fallback login finds it
+          department:        sDept,
+          location:          sLocation,
+          yearsIT:           parseFloat(sYearsIT) || 0,
+          yearsZensar:       parseFloat(sYearsZensar) || 0,
+          primarySkill:      '',
+          primaryDomain:     '',
+          overallCapability: 0,
+          submitted:         false,
+          resumeUploaded:    false,
+          skills:            SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
+        });
+
+        login('employee', emp.id, sName.trim());
+        toast.success('Account created! Now upload your resume 📄');
+        navigate('/employee/resume');
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : 'Registration failed');
+      }
+    } else {
+      // fallback: localStorage
+      const existing = getAllEmployees().find(e => e.email === sEmail.trim());
+      if (existing) { toast.error('Email already registered'); setLoading(false); return; }
+      const emp = createNewEmployee(sName.trim(), sEmail.trim(), `Zensar-${sZensarId.trim()}`);
+      upsertEmployee({
+        ...emp,
+        phone: sMobile.trim(),
+        location: sLocation,
+        yearsIT: parseFloat(sYearsIT) || 0,
+        yearsZensar: parseFloat(sYearsZensar) || 0,
+        department: sDept,
+      });
+      login('employee', emp.id, sName.trim());
+      toast.success('Account created! Now upload your resume 📄');
+      navigate('/employee/resume');
+    }
+    setLoading(false);
+  };
+
+  const eyeBtn = (show: boolean, toggle: () => void) => (
+    <button type="button" onClick={toggle} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center' }}>
+      {show ? <EyeOff size={16} color="rgba(255,255,255,0.5)" /> : <Eye size={16} color="rgba(255,255,255,0.5)" />}
+    </button>
+  );
+
+  const DEPTS = ['Quality Engineering', 'Development', 'DevOps', 'Data & AI', 'Cloud', 'Delivery', 'Management'];
+  const LOCS  = ['Pune, Maharashtra', 'Bangalore, Karnataka', 'Hyderabad, Telangana', 'Chennai, Tamil Nadu', 'Mumbai, Maharashtra', 'Noida, UP'];
+
+  return (
+    <div style={{
+      minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+      position: 'relative', overflow: 'hidden', fontFamily: "'Inter',sans-serif",
+    }}>
+      {/* Background image */}
+      <div style={{ position: 'absolute', inset: 0, backgroundImage: `url(${BG})`, backgroundSize: 'cover', backgroundPosition: 'center', zIndex: 0 }} />
+      {/* Dark overlay */}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(140deg,rgba(4,9,28,0.88),rgba(10,20,60,0.82))', zIndex: 1 }} />
+      {/* Glow accents */}
+      <div style={{ position: 'absolute', top: '10%', left: '5%', width: '38%', height: '55%', background: 'radial-gradient(circle,rgba(59,130,246,0.22) 0%,transparent 65%)', zIndex: 1, pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '5%', right: '5%', width: '34%', height: '45%', background: 'radial-gradient(circle,rgba(139,92,246,0.20) 0%,transparent 65%)', zIndex: 1, pointerEvents: 'none' }} />
+
+      {/* Auth Card */}
+      <div style={{
+        position: 'relative', zIndex: 2, width: '100%', maxWidth: mode === 'signup' ? '600px' : '420px',
+        margin: '24px auto', padding: '0 16px',
+      }}>
+        <div style={{
+          background: 'rgba(255,255,255,0.08)', backdropFilter: 'blur(28px)', WebkitBackdropFilter: 'blur(28px)',
+          border: '1px solid rgba(255,255,255,0.18)', borderRadius: '24px', padding: '36px 32px',
+          boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
+        }}>
+          {/* Logo + title */}
+          <div style={{ textAlign: 'center', marginBottom: '28px' }}>
+            <div style={{ display: 'inline-flex', alignItems: 'center', gap: '10px', marginBottom: '10px' }}>
+              <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>⚡</div>
+              <span style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif", letterSpacing: '0.02em' }}>Skill Navigator</span>
+            </div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)' }}>Zensar Quality Engineering</div>
+          </div>
+
+          {/* Tab switcher */}
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.08)', borderRadius: '12px', padding: '4px', marginBottom: '28px' }}>
+            {(['login', 'signup'] as Mode[]).map(m => (
+              <button key={m} onClick={() => setMode(m)} style={{
+                flex: 1, padding: '9px', borderRadius: '9px', border: 'none', cursor: 'pointer', fontSize: '13px', fontWeight: 700, transition: 'all 0.25s',
+                background: mode === m ? 'linear-gradient(135deg,#3B82F6,#8B5CF6)' : 'transparent',
+                color: mode === m ? '#fff' : 'rgba(255,255,255,0.5)',
+                boxShadow: mode === m ? '0 2px 14px rgba(59,130,246,0.4)' : 'none',
+              }}>
+                {m === 'login' ? '🔑 Login' : '📝 Sign Up'}
+              </button>
+            ))}
+          </div>
+
+          {/* ── LOGIN FORM ── */}
+          {mode === 'login' && (
+            <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+              <div style={{ textAlign: 'center', marginBottom: '4px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif" }}>Welcome Back</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Login with your Zensar ID & password</div>
+              </div>
+
+              <InputRow label="Zensar ID" placeholder="6-digit ID e.g. 123456" value={lZensarId}
+                onChange={setLZensarId} icon={Hash} dark={dark} T={{}} />
+
+              <InputRow label="Password" placeholder="Your password" value={lPassword}
+                onChange={setLPassword} type={showPw ? 'text' : 'password'} icon={Lock} dark={dark} T={{}}
+                suffix={eyeBtn(showPw, () => setShowPw(p => !p))} />
+
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: '13px', borderRadius: '12px', marginTop: '4px',
+                background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', border: 'none',
+                color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                boxShadow: '0 0 24px rgba(59,130,246,0.4)', transition: 'opacity 0.2s',
+                opacity: loading ? 0.7 : 1,
+              }}>
+                {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <><ArrowRight size={16} /> Login</>}
+              </button>
+
+              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '4px' }}>
+                New here?{' '}
+                <span onClick={() => setMode('signup')} style={{ color: '#60A5FA', cursor: 'pointer', fontWeight: 600 }}>
+                  Create an account →
+                </span>
+              </div>
+            </form>
+          )}
+
+          {/* ── SIGN UP FORM ── */}
+          {mode === 'signup' && (
+            <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+              <div style={{ textAlign: 'center', marginBottom: '20px' }}>
+                <div style={{ fontSize: '20px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif" }}>Create Account</div>
+                <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)', marginTop: '4px' }}>Register with your Zensar details</div>
+              </div>
+
+              {/* Row 1: Zensar ID + Name */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <InputRow label="Zensar ID *" placeholder="6-digit number" value={sZensarId}
+                  onChange={v => { if (/^\d{0,6}$/.test(v)) setSZensarId(v); }}
+                  icon={Hash} dark={dark} T={{}} />
+                <InputRow label="Full Name *" placeholder="Rahul Sharma" value={sName}
+                  onChange={setSName} icon={User} dark={dark} T={{}} />
+              </div>
+
+              {/* Row 2: Mobile + Email */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <InputRow label="Mobile Number *" placeholder="+91 98765 43210" value={sMobile}
+                  onChange={setSMobile} type="tel" icon={Phone} dark={dark} T={{}} />
+                <InputRow label="Zensar Email *" placeholder="rahul@zensar.com" value={sEmail}
+                  onChange={setSEmail} type="email" icon={Mail} dark={dark} T={{}} />
+              </div>
+
+              {/* Row 3: Location + Department */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <SelectRow label="Location" value={sLocation} onChange={setSLocation} options={LOCS} icon={MapPin} />
+                <SelectRow label="Department" value={sDept} onChange={setSDept} options={DEPTS} icon={Briefcase} />
+              </div>
+
+              {/* Row 4: Years IT + Years Zensar */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '14px' }}>
+                <InputRow label="Years in IT" placeholder="e.g. 5" value={sYearsIT}
+                  onChange={setSYearsIT} type="number" icon={Clock} dark={dark} T={{}} />
+                <InputRow label="Years at Zensar" placeholder="e.g. 2" value={sYearsZensar}
+                  onChange={setSYearsZensar} type="number" icon={Clock} dark={dark} T={{}} />
+              </div>
+
+              {/* Row 5: Password + Confirm */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px', marginBottom: '20px' }}>
+                <InputRow label="Password *" placeholder="Min 6 chars" value={sPassword}
+                  onChange={setSPassword} type={showPw ? 'text' : 'password'} icon={Lock} dark={dark} T={{}}
+                  suffix={eyeBtn(showPw,  () => setShowPw(p => !p))} />
+                <InputRow label="Confirm Password *" placeholder="Repeat password" value={sCPassword}
+                  onChange={setSCPassword} type={showCPw ? 'text' : 'password'} icon={Lock} dark={dark} T={{}}
+                  suffix={eyeBtn(showCPw, () => setShowCPw(p => !p))} />
+              </div>
+
+              <button type="submit" disabled={loading} style={{
+                width: '100%', padding: '13px', borderRadius: '12px',
+                background: 'linear-gradient(135deg,#10B981,#3B82F6)', border: 'none',
+                color: '#fff', fontWeight: 700, fontSize: '15px', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+                boxShadow: '0 0 22px rgba(16,185,129,0.35)', opacity: loading ? 0.7 : 1,
+              }}>
+                {loading ? <Loader2 size={18} style={{ animation: 'spin 1s linear infinite' }} /> : <>Create Account & Continue <ArrowRight size={16} /></>}
+              </button>
+
+              <div style={{ textAlign: 'center', fontSize: '13px', color: 'rgba(255,255,255,0.45)', marginTop: '14px' }}>
+                Already registered?{' '}
+                <span onClick={() => setMode('login')} style={{ color: '#60A5FA', cursor: 'pointer', fontWeight: 600 }}>
+                  Login →
+                </span>
+              </div>
+            </form>
+          )}
+        </div>
+      </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');
+        @keyframes spin { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+        input::placeholder { color: rgba(255,255,255,0.30) !important; }
+        select option { background: #1e293b; color: #fff; }
+      `}</style>
+    </div>
+  );
+}

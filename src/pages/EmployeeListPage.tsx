@@ -1,92 +1,222 @@
-import { useState, useMemo } from 'react';
-import { MOCK_EMPLOYEES } from '@/lib/mockData';
+import { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Search, Download, Eye } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Search, Eye, Download, FileSpreadsheet, Users } from 'lucide-react';
 import { toast } from 'sonner';
+import { useDark, mkTheme } from '@/lib/themeContext';
+import { getAllEmployees, computeCompletion, exportAllToExcel, exportEmployeeToExcel, upsertEmployee } from '@/lib/localDB';
+import { SKILLS } from '@/lib/mockData';
+import { apiGetAllEmployees, apiGetSkills, isServerAvailable } from '@/lib/api';
+import type { ProficiencyLevel } from '@/lib/types';
 
 export default function EmployeeListPage() {
   const navigate = useNavigate();
+  const { dark } = useDark();
+  const T = mkTheme(dark);
+
   const [search, setSearch] = useState('');
-  const [skillFilter, setSkillFilter] = useState('All');
-  const [domainFilter, setDomainFilter] = useState('All');
+  const [filterStatus, setFilterStatus] = useState<'all' | 'submitted' | 'pending'>('all');
+  const [sortBy, setSortBy] = useState<'name' | 'completion'>('completion');
+  const [refreshTick, setRefreshTick] = useState(0);
+
+  // Sync employees from backend into localStorage on mount
+  useEffect(() => {
+    (async () => {
+      const serverUp = await isServerAvailable();
+      if (!serverUp) return;
+      try {
+        const backendEmps = await apiGetAllEmployees();
+        for (const raw of backendEmps) {
+          // Backend returns BOTH Capital fields (ID, Name...) and aliased lowercase (id, name)
+          // Coalesce both so we handle any server version
+          const r = raw as any;
+          const empId = r.ID || r.id;
+          if (!empId) continue;
+
+          upsertEmployee({
+            id:                empId,
+            name:              r.Name              || r.name              || '',
+            email:             r.Email             || r.email             || '',
+            phone:             r.Phone             || r.phone             || '',
+            designation:       r.Designation       || r.designation       || '',
+            department:        r.Department        || r.department        || 'Quality Engineering',
+            location:          r.Location          || r.location          || '',
+            yearsIT:           Number(r.YearsIT    ?? r.yearsIT    ?? 0),
+            yearsZensar:       Number(r.YearsZensar?? r.yearsZensar?? 0),
+            primarySkill:      r.PrimarySkill      || r.primarySkill      || '',
+            primaryDomain:     r.PrimaryDomain     || r.primaryDomain     || '',
+            overallCapability: Number(r.OverallCapability ?? r.overallCapability ?? 0),
+            submitted:         r.Submitted === 'Yes' || r.submitted === 'Yes' || r.submitted === true,
+            resumeUploaded:    r.ResumeUploaded === 'Yes' || r.resumeUploaded === 'Yes' || r.resumeUploaded === true,
+            skills: SKILLS.map(s => ({ skillId: s.id, selfRating: 0 as ProficiencyLevel, managerRating: null, validated: false })),
+          });
+
+          // Also sync their skills
+          try {
+            const skills = await apiGetSkills(empId);
+            if (skills.length > 0) {
+              const { saveSkillRatings } = await import('@/lib/localDB');
+              saveSkillRatings(empId, skills.map(s => ({
+                skillId:       s.skillId,
+                selfRating:    s.selfRating as ProficiencyLevel,
+                managerRating: s.managerRating as ProficiencyLevel | null,
+                validated:     s.validated,
+              })));
+            }
+          } catch { /* skip skill sync error */ }
+        }
+        setRefreshTick(t => t + 1);
+        console.log(`[Admin] Synced ${backendEmps.length} employees from backend`);
+      } catch (err) {
+        console.warn('[Admin] Backend sync failed, using localStorage:', err);
+      }
+    })();
+  }, []);
+
+  const employees = useMemo(() => getAllEmployees(), [refreshTick]);
+  const primarySkills = [...new Set(employees.map(e => e.primarySkill))];
+  const domains = [...new Set(employees.map(e => e.primaryDomain))];
 
   const filtered = useMemo(() => {
-    return MOCK_EMPLOYEES.filter(e => {
-      if (search && !e.name.toLowerCase().includes(search.toLowerCase()) && !e.email.toLowerCase().includes(search.toLowerCase())) return false;
-      if (skillFilter !== 'All' && e.primarySkill !== skillFilter) return false;
-      if (domainFilter !== 'All' && e.primaryDomain !== domainFilter) return false;
+    let list = employees.filter(e => {
+      const q = search.toLowerCase().trim();
+      if (q) {
+        const profileMatch =
+          e.name.toLowerCase().includes(q) ||
+          e.email.toLowerCase().includes(q) ||
+          e.designation.toLowerCase().includes(q) ||
+          e.department.toLowerCase().includes(q) ||
+          e.primarySkill.toLowerCase().includes(q) ||
+          e.primaryDomain.toLowerCase().includes(q);
+        const skillMatch = SKILLS.some(sk =>
+          sk.name.toLowerCase().includes(q) &&
+          (e.skills.find(r => r.skillId === sk.id)?.selfRating ?? 0) > 0
+        );
+        if (!profileMatch && !skillMatch) return false;
+      }
+      if (filterStatus === 'submitted' && !e.submitted) return false;
+      if (filterStatus === 'pending' && e.submitted) return false;
       return true;
     });
-  }, [search, skillFilter, domainFilter]);
+    return [...list].sort((a, b) =>
+      sortBy === 'name'
+        ? a.name.localeCompare(b.name)
+        : computeCompletion(b.skills) - computeCompletion(a.skills)
+    );
+  }, [employees, search, filterStatus, sortBy]);
 
-  const primarySkills = [...new Set(MOCK_EMPLOYEES.map(e => e.primarySkill))];
-  const domains = [...new Set(MOCK_EMPLOYEES.map(e => e.primaryDomain))];
+  const card: React.CSSProperties = {
+    background: T.card, border: `1px solid ${T.bdr}`,
+    borderRadius: 16, backdropFilter: 'blur(10px)',
+    padding: '18px 20px',
+  };
 
   return (
-    <div className="container py-8 animate-fade-in">
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
-        <div>
-          <h1 className="text-3xl font-display font-bold">Employees</h1>
-          <p className="text-muted-foreground mt-1">{MOCK_EMPLOYEES.length} team members</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => toast.success('Export ready (mock)')}><Download size={14} /> Export</Button>
-        </div>
-      </div>
+    <div style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: "'Inter',sans-serif", transition: 'background 0.35s, color 0.35s', padding: '32px 20px 80px' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-6">
-        <div className="relative flex-1 max-w-xs">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-          <input
-            type="text"
-            placeholder="Search by name or email..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            className="w-full pl-9 pr-4 py-2 rounded-lg border border-input bg-card text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-          />
+        {/* Header */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 14, marginBottom: 28 }}>
+          <div>
+            <h1 style={{ fontSize: 28, fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", marginBottom: 4 }}>Employees</h1>
+            <p style={{ color: T.sub, fontSize: 14 }}>{employees.length} team members</p>
+          </div>
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button onClick={() => { exportAllToExcel(); toast.success('All data exported!'); }}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: 'linear-gradient(135deg,#10B981,#059669)', border: 'none', color: '#fff', fontWeight: 700, fontSize: 13, cursor: 'pointer' }}>
+              <FileSpreadsheet size={15} /> Export All
+            </button>
+          </div>
         </div>
-        <select value={skillFilter} onChange={e => setSkillFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-input bg-card text-sm">
-          <option value="All">All Skills</option>
-          {primarySkills.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
-        <select value={domainFilter} onChange={e => setDomainFilter(e.target.value)} className="px-3 py-2 rounded-lg border border-input bg-card text-sm">
-          <option value="All">All Domains</option>
-          {domains.map(d => <option key={d} value={d}>{d}</option>)}
-        </select>
-      </div>
 
-      {/* Employee cards */}
-      <div className="grid gap-4">
-        {filtered.map(emp => (
-          <div key={emp.id} className="bg-card border border-border rounded-xl p-5 flex flex-col sm:flex-row sm:items-center gap-4 hover:shadow-elevated transition-shadow animate-scale-in">
-            <div className="w-12 h-12 rounded-xl gradient-primary flex items-center justify-center flex-shrink-0">
-              <span className="text-primary-foreground font-display font-bold">{emp.name.split(' ').map(n => n[0]).join('')}</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="font-semibold">{emp.name}</div>
-              <div className="text-sm text-muted-foreground">{emp.designation} · {emp.department}</div>
-              <div className="flex flex-wrap gap-2 mt-2">
-                <span className="px-2 py-0.5 rounded text-xs bg-accent text-accent-foreground">{emp.primarySkill}</span>
-                <span className="px-2 py-0.5 rounded text-xs bg-accent text-accent-foreground">{emp.primaryDomain}</span>
-                <span className="px-2 py-0.5 rounded text-xs bg-muted text-muted-foreground">{emp.yearsIT}y IT · {emp.yearsZensar}y Zensar</span>
-              </div>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-right">
-                <div className="text-lg font-display font-bold">{emp.overallCapability}%</div>
-                <div className="w-20 h-2 bg-muted rounded-full overflow-hidden">
-                  <div className="h-full rounded-full gradient-primary" style={{ width: `${emp.overallCapability}%` }} />
+        {/* Search + Filters */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, marginBottom: 20, alignItems: 'center' }}>
+          <div style={{ position: 'relative', flex: 1, minWidth: 200 }}>
+            <Search size={15} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: T.muted }} />
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)}
+              placeholder="Search by name, email, skill, department..."
+              style={{ width: '100%', paddingLeft: 36, paddingRight: 12, paddingTop: 10, paddingBottom: 10, borderRadius: 10, background: T.input, border: `1px solid ${T.inputBdr}`, color: T.text, fontSize: 13, outline: 'none', boxSizing: 'border-box' }} />
+          </div>
+          <select value={filterStatus} onChange={e => setFilterStatus(e.target.value as typeof filterStatus)}
+            style={{ padding: '10px 14px', borderRadius: 10, background: T.input, border: `1px solid ${T.inputBdr}`, color: T.text, fontSize: 13, cursor: 'pointer' }}>
+            <option value="all">All Status</option>
+            <option value="submitted">Submitted</option>
+            <option value="pending">Pending</option>
+          </select>
+          <select value={sortBy} onChange={e => setSortBy(e.target.value as typeof sortBy)}
+            style={{ padding: '10px 14px', borderRadius: 10, background: T.input, border: `1px solid ${T.inputBdr}`, color: T.text, fontSize: 13, cursor: 'pointer' }}>
+            <option value="completion">Sort: Completion</option>
+            <option value="name">Sort: Name</option>
+          </select>
+          <span style={{ fontSize: 12, color: T.muted }}>{filtered.length} found</span>
+        </div>
+
+        {/* Employee cards */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {filtered.map(emp => {
+            const pct = computeCompletion(emp.skills);
+            const rated = emp.skills.filter(s => s.selfRating > 0).length;
+            return (
+              <div key={emp.id} style={{ ...card, display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 14, transition: 'all 0.2s' }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = '#3B82F655'; e.currentTarget.style.boxShadow = '0 4px 20px rgba(59,130,246,0.12)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = T.bdr; e.currentTarget.style.boxShadow = 'none'; }}
+              >
+                {/* Avatar */}
+                <div style={{ width: 46, height: 46, borderRadius: 13, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
+                  {emp.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                </div>
+                {/* Info */}
+                <div style={{ flex: 1, minWidth: 200 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: 15, color: T.text }}>{emp.name}</span>
+                    {emp.submitted
+                      ? <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(16,185,129,0.15)', color: '#34D399', border: '1px solid rgba(16,185,129,0.3)' }}>✓ Submitted</span>
+                      : <span style={{ fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 999, background: 'rgba(245,158,11,0.12)', color: '#FCD34D', border: '1px solid rgba(245,158,11,0.3)' }}>⏳ Pending</span>
+                    }
+                  </div>
+                  <div style={{ fontSize: 12, color: T.sub, marginTop: 2 }}>{emp.designation} · {emp.department}</div>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 5, marginTop: 6 }}>
+                    {[emp.primarySkill, emp.primaryDomain, `${emp.yearsIT}y IT · ${emp.yearsZensar}y Zensar`].map((tag, i) => (
+                      <span key={i} style={{ padding: '2px 8px', borderRadius: 6, fontSize: 11, fontWeight: 600, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(59,130,246,0.08)', color: dark ? 'rgba(255,255,255,0.65)' : '#2D4A8A', border: `1px solid ${dark ? 'rgba(255,255,255,0.10)' : 'rgba(59,130,246,0.18)'}` }}>{tag}</span>
+                    ))}
+                  </div>
+                </div>
+                {/* Progress */}
+                <div style={{ minWidth: 110, textAlign: 'right' }}>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: pct >= 70 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#EF4444', fontFamily: "'Space Grotesk',sans-serif" }}>{pct}%</div>
+                  <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{rated}/32 rated</div>
+                  <div style={{ width: '100%', height: 5, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.08)' }}>
+                    <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: pct >= 70 ? '#10B981' : pct >= 40 ? '#F59E0B' : '#EF4444' }} />
+                  </div>
+                </div>
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <button onClick={() => navigate(`/admin/employee/${emp.id}`)}
+                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(59,130,246,0.12)', border: '1px solid rgba(59,130,246,0.25)', color: '#60A5FA', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                    title="View Details"
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(59,130,246,0.22)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(59,130,246,0.12)'}>
+                    <Eye size={15} />
+                  </button>
+                  <button onClick={() => { exportEmployeeToExcel(emp.id); toast.success(`${emp.name}'s report exported!`); }}
+                    style={{ width: 36, height: 36, borderRadius: 9, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.25)', color: '#34D399', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s' }}
+                    title="Export Excel"
+                    onMouseEnter={e => e.currentTarget.style.background = 'rgba(16,185,129,0.22)'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'rgba(16,185,129,0.12)'}>
+                    <Download size={15} />
+                  </button>
                 </div>
               </div>
-              <Button variant="ghost" size="icon" onClick={() => navigate(`/admin/employee/${emp.id}`)}>
-                <Eye size={18} />
-              </Button>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '60px 20px', color: T.muted }}>
+              <Users size={40} style={{ margin: '0 auto 12px', display: 'block' }} />
+              <div style={{ fontSize: 15, fontWeight: 600 }}>No employees found</div>
             </div>
-          </div>
-        ))}
+          )}
+        </div>
       </div>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700;800&display=swap');`}</style>
     </div>
   );
 }

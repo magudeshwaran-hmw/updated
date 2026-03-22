@@ -15,14 +15,18 @@ export interface SkillRating {
   selfRating: ProficiencyLevel;
   managerRating: ProficiencyLevel | null;
   validated: boolean;
+  aiDetected?: boolean;  // true = AI filled this; user cannot change it
 }
+
 
 export interface Employee {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   designation: string;
   department: string;
+  location?: string;
   yearsIT: number;
   yearsZensar: number;
   primarySkill: string;
@@ -30,6 +34,8 @@ export interface Employee {
   skills: SkillRating[];
   resumeUploaded: boolean;
   overallCapability: number;
+  submitted?: boolean;
+  submittedAt?: string;
 }
 
 export interface GrowthPlan {
