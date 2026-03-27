@@ -157,8 +157,8 @@ export default function AuthPage() {
 
       login('employee', emp.id, emp.name || '');
       toast.success(`Welcome back, ${(emp.name || '').split(' ')[0]}! ✅`);
-      // Always go to report if submitted (server OR local), skills matrix if not
-      navigate(isSubmitted ? '/employee/report' : '/employee/skills');
+      // Go to report if submitted, else to resume-upload (which leads to skills)
+      navigate(isSubmitted ? '/employee/report' : '/employee/resume-upload');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network Error: Cannot reach server');
     }
@@ -213,7 +213,7 @@ export default function AuthPage() {
 
       login('employee', emp.id, sName.trim());
       toast.success('Account created! Now upload your resume 📄');
-      navigate('/employee/resume');
+      navigate('/employee/resume-upload');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Network Error: Cannot reach server');
     }

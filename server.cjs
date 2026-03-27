@@ -64,11 +64,11 @@ async function getCloudDB() {
     }
 
     // Merge Capability and Submitted status from Skills into Employees
+    // Merge Capability and Submitted status from Skills into Employees
     actualEmployees = actualEmployees.map(emp => {
       const match = actualSkills.find(s =>
         s.employeeId === emp.ID ||
-        s['Employee ID'] === emp.ID ||
-        s.employeeName === emp.Name
+        s['Employee ID'] === emp.ID
       );
       if (match) {
         let count = 0;
@@ -95,8 +95,7 @@ async function syncSkillsToCloud(payload) {
     const existing = await getCloudDB();
     const existingSkill = existing.skills.find(s =>
       s.employeeId === payload.employeeId ||
-      s['Employee ID'] === payload.employeeId ||
-      s.employeeName === payload.employeeName
+      s['Employee ID'] === payload.employeeId
     );
 
     const eventType = existingSkill ? 'SKILLS_UPDATE' : 'SKILLS_UPDATED';
@@ -227,8 +226,7 @@ app.get('/api/employees/:id/skills', async (req, res) => {
   const { skills } = await getCloudDB();
   const empSkillsRow = skills.find(s =>
     s.employeeId === req.params.id ||
-    s['Employee ID'] === req.params.id ||
-    s.employeeName === req.params.id
+    s['Employee ID'] === req.params.id
   );
   if (!empSkillsRow) return res.json([]);
 
