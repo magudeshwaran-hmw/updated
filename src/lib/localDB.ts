@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /**
  * localDB.ts — localStorage-based DB + Excel (XLSX) export
  */
@@ -37,7 +38,7 @@ function writeGrowthPlans(data: GrowthPlan[]) {
 // ─── Employee CRUD ────────────────────────────────────────────────────────────
 export async function getAllEmployees(): Promise<{ employees: any[], skills: any[] }> {
   try {
-    const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
+    const res = await fetch(`${API_BASE}/employees`);
     return await res.json();
   } catch (err) {
     console.error('Fetch error:', err);
@@ -52,7 +53,7 @@ export async function getCurrentUser(): Promise<any> {
 }
 
 export async function saveEmployee(employeeData: any) {
-  const res = await fetch(`http://${window.location.hostname}:3001/api/sync`, {
+  const res = await fetch(`${API_BASE}/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ eventType: 'EMPLOYEE_REGISTERED', ...employeeData })
@@ -61,7 +62,7 @@ export async function saveEmployee(employeeData: any) {
 }
 
 export async function saveSkillRatings(employeeId: string, employeeName: string, ratings: any) {
-  const res = await fetch(`http://${window.location.hostname}:3001/api/sync`, {
+  const res = await fetch(`${API_BASE}/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

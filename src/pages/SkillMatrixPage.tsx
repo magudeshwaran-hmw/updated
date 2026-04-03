@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 import { useState, useMemo, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SKILLS } from '@/lib/mockData';
@@ -79,7 +80,7 @@ export default function SkillMatrixPage() {
     
     (async () => {
       try {
-        const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
+        const res = await fetch(`${API_BASE}/employees`);
         if (!res.ok) return;
         const { employees, skills } = await res.json();
         const employee = (employees || []).find((e: any) => e.ID === sessionId || e.ZensarID === sessionId || e.id === sessionId);

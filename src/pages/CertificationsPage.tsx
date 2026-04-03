@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /**
  * CertificationsPage.tsx — /employee/certifications
  * Employee view to add/edit/delete certifications.
@@ -33,7 +34,7 @@ export default function CertificationsPage() {
 
     setGlobalLoading('Saving certification...');
     try {
-      await fetch('http://localhost:3001/api/certifications', {
+      await fetch(`${API_BASE}/certifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -54,7 +55,7 @@ export default function CertificationsPage() {
     if (!confirm('Are you sure you want to delete this certification?')) return;
     setGlobalLoading('Deleting certification...');
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/certifications`, { 
+      await fetch(`${API_BASE}/certifications`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...cert, CertName: '[DELETED]' })

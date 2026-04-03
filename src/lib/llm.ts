@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /*
  * ═══════════════════════════════════════════════
  * TO SWITCH FROM LOCAL TO CLOUD AI:
@@ -25,7 +26,7 @@ const AI_MODE: 'local' | 'cloud' = 'local';
 
 // Try both URLs — avoids "AI offline" on machines where 127.0.0.1 works but localhost doesn't
 const LOCAL_URLS = [
-  'http://localhost:3001/api/llm', // Proxy via our backend to completely bypass Browser CORS
+  `${API_BASE}/llm', // Proxy via our backend to completely bypass Browser CORS
   'http://localhost:11434/api/generate',
   'http://127.0.0.1:11434/api/generate',
 ];

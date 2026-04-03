@@ -3,12 +3,12 @@
  * Falls back to localStorage if the server is not running.
  */
 
-const BASE = `http://${window.location.hostname}:3001/api`;
+export const API_BASE = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? `http://${window.location.hostname}:3001/api` : '/api');
 
 async function req<T>(
   method: string, path: string, body?: unknown
 ): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(`${API_BASE}${path}`, {
     method,
     headers: { 'Content-Type': 'application/json' },
     body: body ? JSON.stringify(body) : undefined,
@@ -21,7 +21,7 @@ async function req<T>(
 // ─── Health check ─────────────────────────────────────────────────────────────
 export async function isServerAvailable(): Promise<boolean> {
   try {
-    const res = await fetch(`${BASE}/employees`, { method: 'GET' });
+    const res = await fetch(`${API_BASE}/employees`, { method: 'GET' });
     return res.ok;
   } catch { return false; }
 }

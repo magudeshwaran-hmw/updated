@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /**
  * AdminDashboard.tsx
  * Redesigned for Elite Aesthetic, supporting Light/Dark modes.
@@ -72,10 +73,10 @@ export default function AdminDashboard() {
     try {
       const { employees: _emps, skills: _skills } = await apiGetAllEmployees();
       
-      const cRes = await fetch(`http://${window.location.hostname}:3001/api/certifications/ALL`);
+      const cRes = await fetch(`${API_BASE}/certifications/ALL`);
       const { certifications } = await cRes.json();
       
-      const pRes = await fetch(`http://${window.location.hostname}:3001/api/projects/ALL`);
+      const pRes = await fetch(`${API_BASE}/projects/ALL`);
       const { projects } = await pRes.json();
 
       const formatted = (_emps || [])

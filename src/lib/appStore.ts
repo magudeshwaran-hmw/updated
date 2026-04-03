@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 // ─── App-wide data store ──────────────────────────────────────────
 // Single fetch for entire app. All pages read from here.
 
@@ -101,7 +102,7 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
     const sessionId = (overrideSessionId || localStorage.getItem('skill_nav_session_id') || '').trim().toLowerCase();
     if (!sessionId) return null;
 
-    const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
+    const res = await fetch(`${API_BASE}/employees`);
     if (!res.ok) return null;
     const { employees, skills: allSkills } = await res.json();
 
@@ -172,7 +173,7 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
     // Load certifications
     let certifications: Certification[] = [];
     try {
-      const certsRes = await fetch(`http://${window.location.hostname}:3001/api/certifications/${sessionId}`);
+      const certsRes = await fetch(`${API_BASE}/certifications/${sessionId}`);
       const { certifications: rawCerts } = await certsRes.json();
       certifications = (rawCerts || [])
         .filter((c: any) => !String(c.CertName || '').includes('[DELETED]'))
@@ -186,7 +187,7 @@ export const loadAppData = async (overrideSessionId?: string): Promise<AppData |
     // Load projects
     let projects: Project[] = [];
     try {
-      const projRes = await fetch(`http://${window.location.hostname}:3001/api/projects/${sessionId}`);
+      const projRes = await fetch(`${API_BASE}/projects/${sessionId}`);
       const { projects: rawProjects } = await projRes.json();
       projects = (rawProjects || [])
         .filter((p: any) => !String(p.ProjectName || '').includes('[DELETED]'))

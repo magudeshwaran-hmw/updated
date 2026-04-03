@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /**
  * ProjectsPage.tsx — /employee/projects
  * Employee view to add/edit/delete projects.
@@ -40,7 +41,7 @@ export default function ProjectsPage() {
 
     setGlobalLoading('Saving project...');
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/projects`, {
+      await fetch(`${API_BASE}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -72,7 +73,7 @@ export default function ProjectsPage() {
     if (!confirm('Are you sure you want to delete this project?')) return;
     setGlobalLoading('Deleting project...');
     try {
-      await fetch(`http://${window.location.hostname}:3001/api/projects`, { 
+      await fetch(`${API_BASE}/projects`, { 
         method: 'POST', 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...project, ProjectName: '[DELETED]' })

@@ -1,3 +1,4 @@
+import { API_BASE } from '@/lib/api';
 /**
  * ResumeUploadPage.tsx — /employee/resume-upload
  * Step shown BEFORE skill matrix for first-time users.
@@ -215,7 +216,7 @@ export default function ResumeUploadPage() {
       // 3. Save Certifications to backend
       if (extractedData?.certifications) {
         for (const cert of extractedData.certifications) {
-          await fetch(`http://${window.location.hostname}:3001/api/certifications`, {
+          await fetch(`${API_BASE}/certifications`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -234,7 +235,7 @@ export default function ResumeUploadPage() {
       // 4. Save Projects to backend
       if (extractedData?.projects) {
         for (const proj of extractedData.projects) {
-          await fetch(`http://${window.location.hostname}:3001/api/projects`, {
+          await fetch(`${API_BASE}/projects`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
