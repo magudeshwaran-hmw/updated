@@ -70,7 +70,7 @@ export default function SkillMatrixPage() {
     
     (async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/employees');
+        const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
         if (!res.ok) return;
         const { employees, skills } = await res.json();
         const employee = (employees || []).find((e: any) => e.ID === sessionId || e.ZensarID === sessionId || e.id === sessionId);
@@ -83,16 +83,38 @@ export default function SkillMatrixPage() {
 
         const userSkills = (skills || []).find((s: any) => s.employeeId === sessionId || s.EmployeeID === sessionId || s['Employee ID'] === sessionId);
         if (userSkills) {
-          const hasCloudRating = SKILL_NAMES.some(n => parseInt(String(userSkills[n] || 0)) > 0);
+          const hasCloudRating = SKILLS.some(sk => {
+            const query = sk.name.toLowerCase();
+            return Object.keys(userSkills).some(k => {
+              if (k.toLowerCase() === query || 
+                  k.toLowerCase() === sk.name.replace(/#/g, '_x0023_').toLowerCase() ||
+                  k.toLowerCase().replace(/_x0020_/g, ' ') === query ||
+                  k.toLowerCase().replace(/_/g, ' ') === query) {
+                return parseInt(String(userSkills[k] || 0)) > 0;
+              }
+              return false;
+            });
+          });
           
           if (hasCloudRating) {
             // Only update if cloud has something meaningful
             const cloudRatings: SkillRating[] = SKILLS.map(sk => {
-              let val = userSkills[sk.name];
-              if (sk.name === 'C#' && val === undefined) val = userSkills['C_x0023_'];
+              let raw = userSkills[sk.name];
+              if (raw === undefined) {
+                const query = sk.name.toLowerCase();
+                const key = Object.keys(userSkills).find(k => 
+                  k.toLowerCase() === query ||
+                  k.toLowerCase() === sk.name.replace(/#/g, '_x0023_').toLowerCase() ||
+                  k.toLowerCase().replace(/_x0020_/g, ' ') === query ||
+                  k.toLowerCase().replace(/_/g, ' ') === query ||
+                  k.toLowerCase() === sk.name.replace(/\//g, '_x002f_').toLowerCase() ||
+                  k.toLowerCase() === sk.name.replace(/\//g, '_').toLowerCase()
+                );
+                if (key) raw = userSkills[key];
+              }
               return {
                 skillId: sk.id, 
-                selfRating: (parseInt(String(val || 0)) || 0) as ProficiencyLevel,
+                selfRating: (parseInt(String(raw || 0)) || 0) as ProficiencyLevel,
                 managerRating: null, validated: false,
               };
             });
@@ -133,7 +155,7 @@ export default function SkillMatrixPage() {
     saveSkillRatings(employeeId, empName, ratings);
     try {
       const serverUp = await isServerAvailable();
-      if (serverUp) await apiSaveSkills(employeeId, buildSkillsPayload());
+      if (serverUp) await apiSaveSkills(employeeId, empName, buildSkillsPayload());
     } catch (err) {
       toast.error('Could not save to server — progress kept locally');
       return;
@@ -150,14 +172,13 @@ export default function SkillMatrixPage() {
     try {
       const serverUp = await isServerAvailable();
       if (serverUp) {
-        await apiSaveSkills(employeeId, buildSkillsPayload());
-        await apiSubmit(employeeId);
-        toast.success('🎉 Skill Matrix submitted!');
+        await apiSaveSkills(employeeId, empName, buildSkillsPayload());
+        toast.success('🎉 Skill Matrix correctly updated in database!');
       } else {
         toast.success('🎉 Skill Matrix submitted locally!');
       }
     } catch (err) {
-      toast.warning('✅ Submitted locally! (Excel error)');
+      toast.warning('✅ Saved locally! (Backend error)');
     }
     setTimeout(() => navigate('/employee/dashboard'), 900);
   };

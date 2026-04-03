@@ -1,25 +1,38 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { AppData, loadAppData } from './appStore';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 interface AppContextType {
   data: AppData | null;
   isLoading: boolean;
+  setGlobalLoading: (val: boolean | string | null) => void;
   reload: () => Promise<void>;
 }
 
 export const AppContext = createContext<AppContextType>({
-  data: null, isLoading: true, reload: async () => {},
+  data: null, isLoading: true, setGlobalLoading: () => {}, reload: async () => {},
 });
 
 export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   const [data, setData]       = useState<AppData | null>(null);
   const [isLoading, setLoading] = useState(true);
+  const [loadingText, setLoadingText] = useState('Syncing data...');
+
+  const setGlobalLoading = (val: boolean | string | null) => {
+    if (typeof val === 'string') {
+      setLoadingText(val);
+      setLoading(true);
+    } else {
+      setLoading(!!val);
+      if (val === true) setLoadingText('Syncing data...');
+    }
+  };
 
   const load = async () => {
-    setLoading(true);
+    setGlobalLoading('Synchronizing Zensar Cloud...');
     const result = await loadAppData();
     setData(result);
-    setLoading(false);
+    setGlobalLoading(false);
   };
 
   useEffect(() => { load(); }, []);
@@ -32,7 +45,8 @@ export const AppProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   return (
-    <AppContext.Provider value={{ data, isLoading, reload: load }}>
+    <AppContext.Provider value={{ data, isLoading, setGlobalLoading, reload: load }}>
+      <LoadingOverlay active={isLoading} text={loadingText} />
       {children}
     </AppContext.Provider>
   );

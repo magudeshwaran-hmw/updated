@@ -12,7 +12,7 @@ import { Award, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, X, ExternalLink 
 export default function CertificationsPage() {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isLoading } = useApp();
+  const { data, reload, isLoading, setGlobalLoading } = useApp();
   const { employeeId } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editingCert, setEditingCert] = useState<any>(null);
@@ -30,28 +30,35 @@ export default function CertificationsPage() {
     e.preventDefault();
     if (!form.CertName.trim() || !form.Provider.trim()) return alert('Name and Provider are required');
 
+    setGlobalLoading(true, 'Saving certification...');
     try {
       await fetch('http://localhost:3001/api/certifications', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: editingCert?.ID || '', // empty triggers insert
+          ID: employeeId,
+          ZensarID: employeeId,
           EmployeeID: employeeId,
-          EmployeeName: data?.user?.Name,
+          EmployeeName: data?.user?.Name || data?.user?.name || employeeId,
           ...form
         })
       });
       setShowModal(false);
-      reload();
-    } catch (err) { alert('Failed to save'); }
+      await reload();
+    } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (cert: any) => {
     if (!confirm('Are you sure you want to delete this certification?')) return;
+    setGlobalLoading(true, 'Deleting certification...');
     try {
-      await fetch(`http://localhost:3001/api/certifications/${id}`, { method: 'DELETE' });
-      reload();
-    } catch (err) { alert('Failed to delete'); }
+      await fetch(`http://${window.location.hostname}:3001/api/certifications`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...cert, CertName: '[DELETED]' })
+      });
+      await reload();
+    } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
   };
 
   const openEdit = (c: any) => {
@@ -115,8 +122,8 @@ export default function CertificationsPage() {
 
           {/* Grid */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
-            {certs.map(c => (
-              <div key={c.ID} style={{ ...cardStyle, display: 'flex', flexDirection: 'column' }}>
+            {certs.map((c, i) => (
+              <div key={c.CertName + i} style={{ ...cardStyle, display: 'flex', flexDirection: 'column' }}>
                 <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
                   <div style={{ width: 40, height: 40, borderRadius: 10, background: 'rgba(107,45,139,0.1)', color: '#c084fc', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     <Award size={20} />
@@ -146,7 +153,7 @@ export default function CertificationsPage() {
                   <div style={{ display: 'flex', gap: 8 }}>
                     {c.CredentialURL && <a href={c.CredentialURL} target="_blank" rel="noreferrer" style={{ background: 'rgba(59,130,246,0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#3B82F6', cursor: 'pointer', display: 'flex' }}><ExternalLink size={14}/></a>}
                     <button onClick={() => openEdit(c)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', padding: '6px', borderRadius: 6, color: T.sub, cursor: 'pointer', display: 'flex' }}><Edit2 size={14}/></button>
-                    <button onClick={() => handleDelete(c.ID)} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#EF4444', cursor: 'pointer', display: 'flex' }}><Trash2 size={14}/></button>
+                    <button onClick={() => handleDelete(c)} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#EF4444', cursor: 'pointer', display: 'flex' }}><Trash2 size={14}/></button>
                   </div>
                 </div>
               </div>

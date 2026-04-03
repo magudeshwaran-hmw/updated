@@ -96,42 +96,60 @@ const calculateOverallScore = (
   return Math.round(skillScore + certScore + projectScore);
 };
 
-export const loadAppData = async (): Promise<AppData | null> => {
+export const loadAppData = async (overrideSessionId?: string): Promise<AppData | null> => {
   try {
-    const sessionId = localStorage.getItem('skill_nav_session_id');
+    const sessionId = (overrideSessionId || localStorage.getItem('skill_nav_session_id') || '').trim().toLowerCase();
     if (!sessionId) return null;
 
-    const res = await fetch('http://localhost:3001/api/employees');
+    const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
     if (!res.ok) return null;
     const { employees, skills: allSkills } = await res.json();
 
     let user: any | null = null;
     if (sessionId) {
-      user = (employees || []).find((e: any) =>
-        String(e.id) === String(sessionId) ||
-        String(e.ZensarID) === String(sessionId) ||
-        String(e.ID) === String(sessionId)
-      ) || null;
+      user = (employees || []).find((e: any) => {
+        const id = String(e.id || '').trim().toLowerCase();
+        const zid = String(e.ZensarID || '').trim().toLowerCase();
+        const pid = String(e.ID || '').trim().toLowerCase();
+        const email = String(e.Email || '').trim().toLowerCase();
+        return id === sessionId || zid === sessionId || pid === sessionId || email === sessionId;
+      }) || null;
     }
+    
+    // Fallback: Check localDB if missing from cloud temporarily
+    if (!user) {
+      const localStr = localStorage.getItem('skill_nav_employees');
+      if (localStr) {
+        const localEmps = JSON.parse(localStr);
+        user = localEmps.find((e: any) => String(e.id) === String(sessionId) || String(e.ZensarID) === String(sessionId)) || null;
+      }
+    }
+
     if (!user) return null;
 
     const rawSkills = (allSkills ?? []).find((s: any) =>
-      String(s.employeeId) === String(user!.ZensarID || user!.id || user!.ID) ||
-      String(s.EmployeeID) === String(user!.ZensarID || user!.id || user!.ID)
+      String(s.employeeId) === String(user.ZensarID || user.id || user.ID) ||
+      String(s.EmployeeID) === String(user.ZensarID || user.id || user.ID)
     ) || {};
 
     const ratings: Record<string, number> = {};
     SKILL_NAMES.forEach(skill => {
-      // Robust Excel mapping for symbols and spaces
-      const raw =
-        rawSkills[skill] ??
-        rawSkills[skill.replace(/#/g, '_x0023_')] ??
-        rawSkills[skill.replace(/\//g, '_x002f_')] ??
-        rawSkills[skill.replace(/ /g, '_x0020_')] ??
-        rawSkills[skill.replace(/ /g, '_')] ??
-        rawSkills[skill.replace(/\//g, '_')] ??
-        0;
-      const val = parseInt(String(raw), 10);
+      // Robust Excel mapping for symbols, spaces, and case-sensitivity
+      let raw = rawSkills[skill];
+      if (raw === undefined) {
+        const query = skill.toLowerCase();
+        const key = Object.keys(rawSkills).find(k => 
+          k.toLowerCase() === query ||
+          k.toLowerCase() === skill.replace(/#/g, '_x0023_').toLowerCase() ||
+          k.toLowerCase().replace(/_x0020_/g, ' ') === query ||
+          k.toLowerCase().replace(/_/g, ' ') === query ||
+          k.toLowerCase() === skill.replace(/\//g, '_x002f_').toLowerCase() ||
+          k.toLowerCase() === skill.replace(/\//g, '_').toLowerCase()
+        );
+        if (key) raw = rawSkills[key];
+      }
+      
+      const val = parseInt(String(raw || 0), 10);
       ratings[skill] = Math.min(3, Math.max(0, isNaN(val) ? 0 : val));
     });
 
@@ -154,26 +172,30 @@ export const loadAppData = async (): Promise<AppData | null> => {
     // Load certifications
     let certifications: Certification[] = [];
     try {
-      const certsRes = await fetch(`http://localhost:3001/api/certifications/${sessionId}`);
+      const certsRes = await fetch(`http://${window.location.hostname}:3001/api/certifications/${sessionId}`);
       const { certifications: rawCerts } = await certsRes.json();
-      certifications = (rawCerts || []).map((c: any) => ({
-        ...c,
-        NoExpiry: c.NoExpiry === 'true' || c.NoExpiry === true,
-        status: getCertStatus(c.ExpiryDate, c.NoExpiry)
-      }));
+      certifications = (rawCerts || [])
+        .filter((c: any) => !String(c.CertName || '').includes('[DELETED]'))
+        .map((c: any) => ({
+          ...c,
+          NoExpiry: c.NoExpiry === 'true' || c.NoExpiry === true,
+          status: getCertStatus(c.ExpiryDate, c.NoExpiry)
+        }));
     } catch { /* handle error */ }
 
     // Load projects
     let projects: Project[] = [];
     try {
-      const projRes = await fetch(`http://localhost:3001/api/projects/${sessionId}`);
+      const projRes = await fetch(`http://${window.location.hostname}:3001/api/projects/${sessionId}`);
       const { projects: rawProjects } = await projRes.json();
-      projects = (rawProjects || []).map((p: any) => ({
-        ...p,
-        IsOngoing: p.IsOngoing === 'true' || p.IsOngoing === true,
-        SkillsUsed: typeof p.SkillsUsed === 'string' ? JSON.parse(p.SkillsUsed) : (p.SkillsUsed || []),
-        Technologies: typeof p.Technologies === 'string' ? JSON.parse(p.Technologies) : (p.Technologies || []),
-      }));
+      projects = (rawProjects || [])
+        .filter((p: any) => !String(p.ProjectName || '').includes('[DELETED]'))
+        .map((p: any) => ({
+          ...p,
+          IsOngoing: p.IsOngoing === 'true' || p.IsOngoing === true,
+          SkillsUsed: typeof p.SkillsUsed === 'string' ? JSON.parse(p.SkillsUsed) : (p.SkillsUsed || []),
+          Technologies: typeof p.Technologies === 'string' ? JSON.parse(p.Technologies) : (p.Technologies || []),
+        }));
     } catch { /* handle error */ }
 
     const overallScore = calculateOverallScore(ratings, certifications, projects);

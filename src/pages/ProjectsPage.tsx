@@ -21,7 +21,7 @@ const SKILLS = [ // simplified for multi-select
 export default function ProjectsPage() {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isLoading } = useApp();
+  const { data, reload, isLoading, setGlobalLoading } = useApp();
   const { employeeId } = useAuth();
   const [showModal, setShowModal] = useState(false);
   const [editingProj, setEditingProj] = useState<any>(null);
@@ -37,14 +37,16 @@ export default function ProjectsPage() {
     e.preventDefault();
     if (!form.ProjectName.trim() || !form.Role.trim()) return alert('Name and Role are required');
 
+    setGlobalLoading(true, 'Saving project...');
     try {
-      await fetch('http://localhost:3001/api/projects', {
+      await fetch(`http://${window.location.hostname}:3001/api/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: editingProj?.ID || '',
+          ID: employeeId,
+          ZensarID: employeeId,
           EmployeeID: employeeId,
-          EmployeeName: data?.user?.Name,
+          EmployeeName: data?.user?.Name || data?.user?.name || employeeId,
           ProjectName: form.ProjectName,
           Client: form.Client,
           Domain: form.Domain,
@@ -60,16 +62,21 @@ export default function ProjectsPage() {
         })
       });
       setShowModal(false);
-      reload();
-    } catch (err) { alert('Failed to save'); }
+      await reload();
+    } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (project: any) => {
     if (!confirm('Are you sure you want to delete this project?')) return;
+    setGlobalLoading(true, 'Deleting project...');
     try {
-      await fetch(`http://localhost:3001/api/projects/${id}`, { method: 'DELETE' });
-      reload();
-    } catch (err) { alert('Failed to delete'); }
+      await fetch(`http://${window.location.hostname}:3001/api/projects`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...project, ProjectName: '[DELETED]' })
+      });
+      await reload();
+    } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
   };
 
   const openEdit = (p: any) => {
@@ -126,8 +133,8 @@ export default function ProjectsPage() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
             {projects.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: T.muted }}>No projects added yet.</div>
-            ) : projects.map(p => (
-              <div key={p.ID} style={{ ...cardStyle }}>
+            ) : projects.map((p, i) => (
+              <div key={p.ProjectName + i} style={{ ...cardStyle }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -142,7 +149,7 @@ export default function ProjectsPage() {
                   </div>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button onClick={() => openEdit(p)} style={{ background: 'rgba(255,255,255,0.05)', border: 'none', padding: '6px', borderRadius: 6, color: T.sub, cursor: 'pointer' }}><Edit2 size={16}/></button>
-                    <button onClick={() => handleDelete(p.ID)} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16}/></button>
+                    <button onClick={() => handleDelete(p)} style={{ background: 'rgba(239,68,68,0.1)', border: 'none', padding: '6px', borderRadius: 6, color: '#EF4444', cursor: 'pointer' }}><Trash2 size={16}/></button>
                   </div>
                 </div>
 

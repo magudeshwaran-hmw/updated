@@ -3,14 +3,14 @@
  * Application routing
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, Navigate } from "react-router-dom";
+import { BrowserRouter, Route, Routes, Navigate, useLocation } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from '@/lib/authContext';
 import { ThemeProvider } from '@/lib/themeContext';
 import { ToastProvider } from '@/lib/ToastContext';
 import { UserProvider } from '@/lib/UserContext';
-import { AppProvider } from '@/lib/AppContext';
+import { AppProvider, useApp } from '@/lib/AppContext';
 import AppHeader from '@/components/AppHeader';
 
 import LandingPage from "@/pages/LandingPage";
@@ -29,11 +29,21 @@ import ResumeBuilderPage from "@/pages/ResumeBuilderPage";
 import ResumeUploadPage from "@/pages/ResumeUploadPage";
 import CertificationsPage from "@/pages/CertificationsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { isLoggedIn, role } = useAuth();
+  const { setGlobalLoading } = useApp();
+  const location = useLocation();
+
+  useEffect(() => {
+    // Only trigger for real page changes, not initial mount
+    setGlobalLoading('Syncing Cloud Data...');
+    const t = setTimeout(() => setGlobalLoading(false), 900);
+    return () => clearTimeout(t);
+  }, [location.pathname]);
   
   // Dashboard is the main entry after login
   const loggedInDest = role === 'admin' ? '/admin' : '/employee/dashboard';

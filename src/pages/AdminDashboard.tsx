@@ -1,58 +1,82 @@
 /**
  * AdminDashboard.tsx
- * Redesigned for Elite Aesthetic, supporting Light/Dark modes,
- * and fixing the missing Heatmap & redundant headers.
+ * Redesigned for Elite Aesthetic, supporting Light/Dark modes.
+ * Features: Admin-to-Employee impersonation with immediate session sync.
  */
 import { useMemo, useState, useEffect } from 'react';
 import { SKILLS } from '@/lib/mockData';
 import { useNavigate } from 'react-router-dom';
 import {
-  Users, TrendingUp, AlertTriangle, Award, Download,
-  BarChart3, CheckCircle2, Search, Eye, FileSpreadsheet, RefreshCw, Brain, Briefcase, Map, LayoutDashboard, Settings, LogOut, Info, ShieldCheck, Grid
+  Users, TrendingUp, AlertTriangle, Award, Download, Edit2,
+  BarChart3, CheckCircle2, Search, Eye, FileSpreadsheet, RefreshCw, Grid, X
 } from 'lucide-react';
 import { toast } from '@/lib/ToastContext';
+import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { computeCompletion, exportAllToExcel, exportEmployeeToExcel } from '@/lib/localDB';
-import { apiGetAllEmployees, isServerAvailable, apiUpdateEmployee } from '@/lib/api';
+import { computeCompletion, exportAllToExcel } from '@/lib/localDB';
+import { apiGetAllEmployees } from '@/lib/api';
+import { AppContext, useApp } from '@/lib/AppContext';
+import { loadAppData, AppData } from '@/lib/appStore';
+import EmployeeDashboard from './EmployeeDashboard';
+import SkillMatrixPage from './SkillMatrixPage';
+import CertificationsPage from './CertificationsPage';
+import ProjectsPage from './ProjectsPage';
+import AIIntelligencePage from './AIIntelligencePage';
 
 import {
   Chart as ChartJS, CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement,
   BarController, LineController, DoughnutController, Tooltip, Legend, Title
 } from 'chart.js';
-import { Bar, Pie } from 'react-chartjs-2';
+import { Bar } from 'react-chartjs-2';
 
 ChartJS.register(
   CategoryScale, LinearScale, BarElement, PointElement, LineElement, ArcElement,
   BarController, LineController, DoughnutController, Tooltip, Legend, Title
 );
 
-// ─── ADMIN DASHBOARD ─────────────────────────────────────────────────────────
-
 export default function AdminDashboard() {
   const navigate = useNavigate();
+  const { login } = useAuth();
+  const { setGlobalLoading } = useApp();
   const { dark } = useDark();
   const T = mkTheme(dark);
 
   const [activeTab, setActiveTab] = useState<'Overview' | 'Employees' | 'Skill Heatmap'>('Overview');
-  
   const [employees, setEmployees] = useState<any[]>([]);
-  const [allCerts, setAllCerts] = useState<any[]>([]);
-  const [allProjects, setAllProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
+  // Popup Preview State
+  const [previewUser, setPreviewUser] = useState<any | null>(null);
+  const [previewData, setPreviewData] = useState<AppData | null>(null);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [popupActiveTab, setPopupActiveTab] = useState<'Dashboard' | 'Skills' | 'Certifications' | 'Projects' | 'AI Intelligence'>('Dashboard');
+
+  const handleOpenPreview = async (emp: any) => {
+    setIsPreviewLoading(true);
+    setGlobalLoading('Accessing Employee Portfolio...');
+    setPreviewUser(emp);
+    try {
+      const data = await loadAppData(emp.id);
+      setPreviewData(data);
+    } catch (err) {
+      toast.error('Failed to load employee preview');
+    }
+    setGlobalLoading(null);
+    setIsPreviewLoading(false);
+  };
+
   const loadAllData = async () => {
     setLoading(true);
+    setGlobalLoading('Synchronizing Global Cloud...');
     try {
       const { employees: _emps, skills: _skills } = await apiGetAllEmployees();
       
-      const cRes = await fetch('http://localhost:3001/api/certifications/ALL');
+      const cRes = await fetch(`http://${window.location.hostname}:3001/api/certifications/ALL`);
       const { certifications } = await cRes.json();
-      setAllCerts(certifications || []);
       
-      const pRes = await fetch('http://localhost:3001/api/projects/ALL');
+      const pRes = await fetch(`http://${window.location.hostname}:3001/api/projects/ALL`);
       const { projects } = await pRes.json();
-      setAllProjects(projects || []);
 
       const formatted = (_emps || [])
         .filter((e: any) => (e.Name || e.name) && (e.ZensarID || e.ID || e.id || e.Email || e.email))
@@ -63,18 +87,26 @@ export default function AdminDashboard() {
           ) || {};
   
           const ratingsArray = SKILLS.map(sk => {
-            let val = eSkillsRaw[sk.name];
-            if (sk.name === 'C#' && val === undefined) val = eSkillsRaw['C_x0023_'];
+            let raw = eSkillsRaw[sk.name];
+            if (raw === undefined) {
+              const query = sk.name.toLowerCase();
+              const key = Object.keys(eSkillsRaw).find(k => 
+                k.toLowerCase() === query ||
+                k.toLowerCase() === sk.name.replace(/#/g, '_x0023_').toLowerCase() ||
+                k.toLowerCase().replace(/_x0020_/g, ' ') === query ||
+                k.toLowerCase().replace(/_/g, ' ') === query
+              );
+              if (key) raw = eSkillsRaw[key];
+            }
             return {
               skillId: sk.id, 
-              selfRating: (parseInt(String(val || 0)) || 0) as any,
+              selfRating: (parseInt(String(raw || 0)) || 0) as any,
               managerRating: null, validated: false
             };
           });
   
           const eCerts = (certifications || []).filter((c:any) => String(c.EmployeeID) === zid);
           const eProjs = (projects || []).filter((p:any) => String(p.EmployeeID) === zid);
-          
           const pct = computeCompletion(ratingsArray);
   
           return {
@@ -102,8 +134,7 @@ export default function AdminDashboard() {
     teamSize: employees.length,
     submitted: employees.filter(e => e.submitted).length,
     avgComp: employees.length ? Math.round(employees.reduce((acc, e) => acc + e.completion, 0) / employees.length) : 0,
-    beginnerCount: employees.reduce((acc, e) => acc + e.skills.filter((s:any)=>s.selfRating===1).length, 0),
-    validatedCount: employees.filter(e => e.submitted).length // Using submitted as proxy for demo
+    beginnerCount: employees.reduce((acc, e) => acc + e.skills.filter((s:any)=>s.selfRating===1).length, 0)
   };
 
   const StatCard = ({ label, value, sub, icon: Icon, color }: any) => (
@@ -119,6 +150,7 @@ export default function AdminDashboard() {
 
   return (
     <div style={{ minHeight: '100vh', background: T.bg, color: T.text, fontFamily: "'Inter', sans-serif", padding: '24px 16px 80px' }}>
+      
       <div style={{ maxWidth: 1000, margin: '0 auto', animation: 'fadeUp 0.4s' }}>
         
         {/* Header */}
@@ -243,7 +275,7 @@ export default function AdminDashboard() {
                                <span style={{ 
                                  fontSize: 10, fontWeight: 800, padding: '2px 8px', borderRadius: 6, 
                                  background: `${statusColor}15`, color: statusColor, border: `1px solid ${statusColor}30` 
-                               }}>
+                                }}>
                                  {e.submitted ? 'VALIDATED' : 'SENSING'}
                                </span>
                             </div>
@@ -264,6 +296,14 @@ export default function AdminDashboard() {
                               onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(59,130,246,0.1)'}
                             >
                               <Eye size={18}/>
+                            </button>
+                            <button onClick={() => handleOpenPreview(e)} 
+                              style={{ width: 38, height: 38, borderRadius: 10, background: 'rgba(139,92,246,0.1)', border: '1px solid rgba(139,92,246,0.2)', color: '#8B5CF6', cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'0.2s' }}
+                              onMouseEnter={ev => ev.currentTarget.style.background = 'rgba(139,92,246,0.2)'}
+                              onMouseLeave={ev => ev.currentTarget.style.background = 'rgba(139,92,246,0.1)'}
+                              title="View Dashboard as Popup"
+                            >
+                              {isPreviewLoading && previewUser?.id === e.id ? <RefreshCw size={18} className="animate-spin" /> : <Edit2 size={18}/>}
                             </button>
                          </div>
                       </div>
@@ -293,9 +333,71 @@ export default function AdminDashboard() {
                </div>
             </div>
           )}
-
         </div>
       </div>
+
+      {previewUser && (
+        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(10px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 20 }}>
+          <div style={{ background: T.bg, borderRadius: 32, width: '100%', maxWidth: 1000, height: '90vh', overflow: 'hidden', border: `1px solid ${T.bdr}`, display: 'flex', flexDirection: 'column', animation: 'fadeUp 0.3s' }}>
+            
+            {/* Modal Top Bar */}
+            <div style={{ padding: '16px 32px', borderBottom: `1px solid ${T.bdr}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: T.card }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, display:'flex', alignItems:'center', gap:10 }}>{previewUser.name} <span style={{ fontSize: 11, padding: '2px 8px', borderRadius: 6, background: '#3B82F620', color: '#3B82F6' }}>PORTFOLIO</span></h3>
+                <div style={{ fontSize: 10, color: T.muted, textTransform:'uppercase', letterSpacing:1, marginTop:2 }}>Admin Override Console</div>
+              </div>
+              <div style={{ display: 'flex', gap: 6, background: dark?'rgba(255,255,255,0.05)':'rgba(0,0,0,0.03)', padding: 4, borderRadius: 12 }}>
+                {(['Dashboard', 'Skills', 'Certifications', 'Projects', 'AI Intelligence'] as const).map(tab => (
+                   <button 
+                     key={tab} 
+                     onClick={() => setPopupActiveTab(tab)}
+                     style={{
+                        padding: '8px 14px', borderRadius: 8, border: 'none', 
+                        background: popupActiveTab === tab ? '#3B82F6' : 'transparent',
+                        color: popupActiveTab === tab ? '#fff' : T.sub,
+                        fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: '0.2s'
+                     }}
+                   >
+                     {tab}
+                   </button>
+                ))}
+              </div>
+              <button onClick={() => { setPreviewUser(null); setPreviewData(null); setPopupActiveTab('Dashboard'); }} style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#EF4444', cursor: 'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+                <X size={20}/>
+              </button>
+            </div>
+
+            {/* Employee Dashboard Content with Overridden Context */}
+            <div style={{ flex: 1, overflowY: 'auto', background: T.bg }}>
+              {isPreviewLoading ? (
+                <div style={{ height: '100%', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', gap: 20 }}>
+                   <RefreshCw size={40} color="#3B82F6" className="animate-spin" />
+                   <div style={{ fontSize: 14, color: T.sub }}>Syncing Profile Data...</div>
+                </div>
+              ) : (
+                <AppContext.Provider value={{ 
+                  data: previewData, 
+                  isLoading: false, 
+                  setGlobalLoading: () => {}, 
+                  reload: async () => {
+                    const d = await loadAppData(previewUser.id);
+                    setPreviewData(d);
+                    loadAllData(); // Sync admin view
+                  }
+                }}>
+                  <div style={{ pointerEvents: 'auto', animation: 'fadeIn 0.4s' }}>
+                    {popupActiveTab === 'Dashboard' && <EmployeeDashboard />}
+                    {popupActiveTab === 'Skills' && <SkillMatrixPage />}
+                    {popupActiveTab === 'Certifications' && <CertificationsPage />}
+                    {popupActiveTab === 'Projects' && <ProjectsPage />}
+                    {popupActiveTab === 'AI Intelligence' && <AIIntelligencePage />}
+                  </div>
+                </AppContext.Provider>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes fadeUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }

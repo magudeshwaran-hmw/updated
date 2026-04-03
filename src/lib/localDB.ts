@@ -37,7 +37,7 @@ function writeGrowthPlans(data: GrowthPlan[]) {
 // ─── Employee CRUD ────────────────────────────────────────────────────────────
 export async function getAllEmployees(): Promise<{ employees: any[], skills: any[] }> {
   try {
-    const res = await fetch('http://localhost:3001/api/employees');
+    const res = await fetch(`http://${window.location.hostname}:3001/api/employees`);
     return await res.json();
   } catch (err) {
     console.error('Fetch error:', err);
@@ -52,7 +52,7 @@ export async function getCurrentUser(): Promise<any> {
 }
 
 export async function saveEmployee(employeeData: any) {
-  const res = await fetch('http://localhost:3001/api/sync', {
+  const res = await fetch(`http://${window.location.hostname}:3001/api/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ eventType: 'EMPLOYEE_REGISTERED', ...employeeData })
@@ -61,7 +61,7 @@ export async function saveEmployee(employeeData: any) {
 }
 
 export async function saveSkillRatings(employeeId: string, employeeName: string, ratings: any) {
-  const res = await fetch('http://localhost:3001/api/sync', {
+  const res = await fetch(`http://${window.location.hostname}:3001/api/sync`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -174,14 +174,18 @@ export interface SessionUser { employeeId: string; role: 'employee' | 'admin'; n
 
 export function saveSession(user: SessionUser) {
   localStorage.setItem('skill_nav_session_id', user.employeeId);
+  window.dispatchEvent(new Event('skill_nav_session_changed'));
 }
 export function loadSession(): SessionUser | null {
   const id = localStorage.getItem('skill_nav_session_id');
   if (!id) return null;
-  // Temporary synchronous fallback structure for standard app routing until the async data loads!
+  // Temporary synchronous fallback structure for standard app routing!
   return { employeeId: id, role: 'employee', name: 'User' };
 }
-export function clearSession() { localStorage.removeItem('skill_nav_session_id'); }
+export function clearSession() { 
+  localStorage.removeItem('skill_nav_session_id'); 
+  window.dispatchEvent(new Event('skill_nav_session_changed'));
+}
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
 const LEVEL_LABEL: Record<number, string> = { 0: 'Not Rated', 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };

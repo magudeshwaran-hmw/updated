@@ -215,10 +215,12 @@ export default function ResumeUploadPage() {
       // 3. Save Certifications to backend
       if (extractedData?.certifications) {
         for (const cert of extractedData.certifications) {
-          await fetch('http://localhost:3001/api/certifications', {
+          await fetch(`http://${window.location.hostname}:3001/api/certifications`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              ID: employeeId,
+              ZensarID: employeeId,
               EmployeeID: employeeId, EmployeeName: emp?.name,
               CertName: cert.CertName, Provider: cert.Provider,
               IssueDate: cert.IssueDate, ExpiryDate: cert.ExpiryDate,
@@ -232,10 +234,12 @@ export default function ResumeUploadPage() {
       // 4. Save Projects to backend
       if (extractedData?.projects) {
         for (const proj of extractedData.projects) {
-          await fetch('http://localhost:3001/api/projects', {
+          await fetch(`http://${window.location.hostname}:3001/api/projects`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
+              ID: employeeId,
+              ZensarID: employeeId,
               EmployeeID: employeeId, EmployeeName: emp?.name,
               ProjectName: proj.ProjectName, Client: proj.Client,
               Domain: proj.Domain, Role: proj.Role,

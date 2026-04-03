@@ -4,9 +4,11 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev:ui": "vite",
     "server": "node server.cjs",
-    "dev:full": "concurrently \"npm run dev\" \"npm run server\"",
+    "ollama:serve": "set OLLAMA_ORIGINS=* && ollama serve",
+    "ollama:pull": "ollama pull llama3",
+    "dev": "concurrently \"npm run dev:ui\" \"npm run server\" \"npm run ollama:serve\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "lint": "eslint .",

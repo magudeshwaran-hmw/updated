@@ -3,7 +3,7 @@
  * Falls back to localStorage if the server is not running.
  */
 
-const BASE = 'http://localhost:3001/api';
+const BASE = `http://${window.location.hostname}:3001/api`;
 
 async function req<T>(
   method: string, path: string, body?: unknown
@@ -84,9 +84,10 @@ export async function apiGetSkills(employeeId: string): Promise<ApiSkillRating[]
 // flatSkills format: { "Selenium": 2, "Python": 3, ... }
 export async function apiSaveSkills(
   employeeId: string,
+  employeeName: string,
   flatSkills: Record<string, number>
 ): Promise<void> {
-  await req('PUT', `/employees/${employeeId}/skills`, flatSkills);
+  await req('PUT', `/employees/${employeeId}/skills`, { employeeName, ...flatSkills });
 }
 
 export async function apiSubmit(employeeId: string): Promise<void> {

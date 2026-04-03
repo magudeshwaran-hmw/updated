@@ -35,11 +35,28 @@ async function getCloudDB() {
     const res = await fetch(GET_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     if (!res.ok) throw new Error(`Cloud returned ${res.status}`);
     const json = await res.json();
-    let employees = Array.isArray(json.employees) ? json.employees : [];
-    let skills = Array.isArray(json.skills) ? json.skills : [];
+    let employees = Array.isArray(json.employees) ? [...json.employees].reverse() : [];
+    let skills = Array.isArray(json.skills) ? [...json.skills].reverse() : [];
     if (employees[0] && Object.keys(employees[0]).find(k => k.toLowerCase().includes('selenium'))) {
       const tmp = employees; employees = skills; skills = tmp;
     }
+
+    const seenEmp = new Set();
+    employees = employees.filter(e => {
+      const id = String(e.ID || e.ZensarID || e.id || e.Email || '').toLowerCase();
+      if (!id || seenEmp.has(id)) return false;
+      seenEmp.add(id);
+      return true;
+    });
+
+    const seenSkills = new Set();
+    skills = skills.filter(s => {
+      const id = String(s.employeeId || s.EmployeeID || s['Employee ID'] || '').toLowerCase();
+      if (!id || seenSkills.has(id)) return false;
+      seenSkills.add(id);
+      return true;
+    });
+
     return { employees, skills };
   } catch (err) { return { employees: [], skills: [] }; }
 }
@@ -89,7 +106,17 @@ async function getTableData(url, employeeId) {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeeId: employeeId || 'ALL' }) });
     if (!res.ok) return [];
     const json = await res.json();
-    return json.projects || json.certifications || [];
+    let data = json.projects || json.certifications || [];
+    if (!Array.isArray(data)) return [];
+    data = [...data].reverse();
+    // LIFO deduplication
+    const seen = new Set();
+    return data.filter(item => {
+      const key = `${item.EmployeeID}_${item.ProjectName || item.CertName || ''}`.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
   } catch { return []; }
 }
 
@@ -118,6 +145,7 @@ app.post('/api/register', async (req, res) => {
   const zid = zensarId || `emp_${Date.now()}`;
   const newEmp = {
     ID: zid, ZensarID: zid, Name: name, Email: email || '', Phone: phone || '',
+    PhoneNumber: phone || '', Mobile: phone || '', ContactNo: phone || '', Contact: phone || '',
     Designation: designation || 'Engineer', Department: department || 'Quality Engineering',
     Location: location || 'India', YearsIT: yearsIT || 0, YearsZensar: yearsZensar || 0,
     Password: hashPw(password), OverallCapability: 0, Submitted: 'No'
@@ -127,13 +155,22 @@ app.post('/api/register', async (req, res) => {
 });
 
 app.post('/api/login', async (req, res) => {
-  const { login: loginId, password } = req.body;
+  const loginId = String(req.body.login || '').trim().toLowerCase();
+  const password = String(req.body.password || '').trim();
   const { employees } = await getCloudDB();
-  const emp = employees.find(e =>
-    String(e.ZensarID) === String(loginId) || (e.Email && String(e.Email).toLowerCase() === String(loginId).toLowerCase()) || String(e.Phone) === String(loginId)
-  );
+  const emp = employees.find(e => {
+    const zid = String(e.ZensarID || '').trim().toLowerCase();
+    const id = String(e.ID || '').trim().toLowerCase();
+    const email = String(e.Email || '').trim().toLowerCase();
+    const phone = String(e.Phone || '').trim().toLowerCase();
+    return zid === loginId || id === loginId || email === loginId || phone === loginId;
+  });
   if (!emp) return res.status(401).json({ error: 'Account not found' });
-  if (emp.Password && emp.Password !== hashPw(password) && emp.Password !== password) return res.status(401).json({ error: 'Incorrect password' });
+  
+  const storedPw = String(emp.Password || '').trim();
+  if (storedPw !== hashPw(password) && storedPw !== password) {
+    return res.status(401).json({ error: 'Incorrect password' });
+  }
   res.json({ success: true, employee: { ...emp, id: emp.ZensarID || emp.ID, name: emp.Name, role: 'employee' } });
 });
 
@@ -154,7 +191,7 @@ app.put('/api/employees/:id/skills', async (req, res) => {
   SKILL_NAMES.forEach(name => { flatSkills[name] = parseInt(String(body[name] || 0)) || 0; });
   const rated = SKILL_NAMES.filter(n => flatSkills[n] > 0).length;
   const cap = Math.round((rated / 32) * 100);
-  await syncSkillsToCloud({ employeeId: req.params.id, skillCount: rated, ...flatSkills });
+  await syncSkillsToCloud({ employeeId: req.params.id, EmployeeName: body.employeeName || body.EmployeeName, ZensarID: req.params.id, skillCount: rated, ...flatSkills });
   const { employees } = await getCloudDB();
   const emp = employees.find(e => String(e.ID) === String(req.params.id) || String(e.ZensarID) === String(req.params.id));
   if (emp) await syncEmployeeToCloud({ ...emp, OverallCapability: cap, Submitted: rated >= 25 ? 'Yes' : 'No' });
@@ -164,21 +201,34 @@ app.put('/api/employees/:id/skills', async (req, res) => {
 // Specific Cert/Project fetches for single employee
 app.get('/api/certifications/:id', async (req, res) => {
   const certifications = await getTableData(CERT_GET_URL, req.params.id);
-  res.json({ certifications: certifications.filter(c => String(c.EmployeeID) === String(req.params.id)) });
+  res.json({ certifications: certifications.filter(c => String(c.EmployeeID) === String(req.params.id) && !String(c.CertName || '').toUpperCase().includes('[DELETED]')) });
 });
+app.post('/api/certifications', async (req, res) => {
+  try {
+    await fetch(CERT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 app.get('/api/projects/:id', async (req, res) => {
   const projects = await getTableData(PROJECT_GET_URL, req.params.id);
-  res.json({ projects: projects.filter(p => String(p.EmployeeID) === String(req.params.id)) });
+  res.json({ projects: projects.filter(p => String(p.EmployeeID) === String(req.params.id) && !String(p.ProjectName || '').toUpperCase().includes('[DELETED]')) });
+});
+app.post('/api/projects', async (req, res) => {
+  try {
+    await fetch(PROJECT_PUSH_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(req.body) });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 // Global fetches
 app.get('/api/certifications/ALL', async (req, res) => {
   const certifications = await getTableData(CERT_GET_URL, 'ALL');
-  res.json({ certifications });
+  res.json({ certifications: certifications.filter(c => !String(c.CertName || '').toUpperCase().includes('[DELETED]')) });
 });
 app.get('/api/projects/ALL', async (req, res) => {
   const projects = await getTableData(PROJECT_GET_URL, 'ALL');
-  res.json({ projects });
+  res.json({ projects: projects.filter(p => !String(p.ProjectName || '').toUpperCase().includes('[DELETED]')) });
 });
 
 app.post('/api/llm', async (req, res) => {
