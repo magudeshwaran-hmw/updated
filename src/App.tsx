@@ -26,9 +26,9 @@ import SkillMatrixPage from "@/pages/SkillMatrixPage";
 import SkillReportPage from "@/pages/SkillReportPage";
 import AIIntelligencePage from "@/pages/AIIntelligencePage";
 import ResumeBuilderPage from "@/pages/ResumeBuilderPage";
-import ResumeUploadPage from "@/pages/ResumeUploadPage";
 import CertificationsPage from "@/pages/CertificationsPage";
 import ProjectsPage from "@/pages/ProjectsPage";
+import EducationPage from "@/pages/EducationPage";
 import { useEffect } from "react";
 
 const queryClient = new QueryClient();
@@ -61,10 +61,10 @@ function AppRoutes() {
         <Route path="/employee/skills"         element={isLoggedIn ? <SkillMatrixPage />    : <Navigate to="/login" />} />
         <Route path="/employee/report"         element={isLoggedIn ? <SkillReportPage />    : <Navigate to="/login" />} />
         <Route path="/employee/ai"             element={isLoggedIn ? <AIIntelligencePage /> : <Navigate to="/login" />} />
-        <Route path="/employee/resume"         element={isLoggedIn ? <ResumeBuilderPage />  : <Navigate to="/login" />} />
-        <Route path="/employee/resume-upload"  element={isLoggedIn ? <ResumeUploadPage />   : <Navigate to="/login" />} />
+        <Route path="/employee/resume-builder" element={isLoggedIn ? <ResumeBuilderPage />  : <Navigate to="/login" />} />
         <Route path="/employee/certifications" element={isLoggedIn ? <CertificationsPage /> : <Navigate to="/login" />} />
         <Route path="/employee/projects"       element={isLoggedIn ? <ProjectsPage />       : <Navigate to="/login" />} />
+        <Route path="/employee/education"      element={isLoggedIn ? <EducationPage />      : <Navigate to="/login" />} />
 
         {/* Legacy URL redirects */}
         <Route path="/employee/ai-hub"       element={<Navigate to="/employee/ai" />} />

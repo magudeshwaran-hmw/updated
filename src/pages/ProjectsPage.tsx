@@ -8,6 +8,7 @@ import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { Briefcase, Plus, Trash2, Edit2, Calendar, MapPin, Users, Target } from 'lucide-react';
+import { toast } from '@/lib/ToastContext';
 
 
 const DOMAINS = ['Banking','Healthcare','E-Commerce','Insurance','Telecom','Other'];
@@ -19,10 +20,21 @@ const SKILLS = [ // simplified for multi-select
   'ChatGPT/Prompt Engineering','AI Test Automation',
 ];
 
-export default function ProjectsPage() {
+export default function ProjectsPage({ 
+  isPopup: propIsPopup, 
+  onTabChange: propOnTabChange 
+}: { 
+  isPopup?: boolean; 
+  onTabChange?: (path: string) => void; 
+}) {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isPopup, isLoading, setGlobalLoading } = useApp();
+  const { data, reload, isPopup: ctxIsPopup, isLoading, setGlobalLoading } = useApp();
+  
+  // Use props if provided, otherwise fall back to context
+  const isPopup = propIsPopup !== undefined ? propIsPopup : ctxIsPopup;
+  const onTabChange = propOnTabChange || (() => {});
+  
   const { employeeId } = useAuth();
   const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   const [showModal, setShowModal] = useState(false);
@@ -41,56 +53,101 @@ export default function ProjectsPage() {
 
     setGlobalLoading('Saving project...');
     try {
-      await fetch(`${API_BASE}/projects`, {
+      // Fix date format: YYYY-MM -> YYYY-MM-DD for PostgreSQL
+      const fixDate = (d: string) => {
+        if (!d) return null;
+        if (d.length === 7) return `${d}-01`; // YYYY-MM -> YYYY-MM-DD
+        if (d.length === 10) return d; // Already YYYY-MM-DD
+        return d;
+      };
+      
+      const fixedStartDate = fixDate(form.StartDate);
+      const fixedEndDate = fixDate(form.EndDate);
+      
+      console.log('Saving project with dates:', { 
+        originalStart: form.StartDate, 
+        fixedStart: fixedStartDate,
+        originalEnd: form.EndDate,
+        fixedEnd: fixedEndDate 
+      });
+      
+      const resp = await fetch(`${API_BASE}/projects`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: activeEmpId,
-          ZensarID: activeEmpId,
+          id: editingProj?.ID || editingProj?.id,
           EmployeeID: activeEmpId,
-          EmployeeName: data?.user?.Name || data?.user?.name || activeEmpId,
+          employeeId: activeEmpId,
           ProjectName: form.ProjectName,
           Client: form.Client,
-          Domain: form.Domain,
+          Domain: form.Domain || 'Other',
           Role: form.Role,
-          StartDate: form.StartDate,
-          EndDate: form.EndDate,
+          StartDate: fixedStartDate,
+          EndDate: fixedEndDate,
           IsOngoing: form.IsOngoing,
           Description: form.Description,
           TeamSize: form.TeamSize,
           Outcome: form.Outcome,
-          SkillsUsed: JSON.stringify(form.SkillsUsed),
-          Technologies: JSON.stringify(form.Technologies),
+          SkillsUsed: form.SkillsUsed,
+          Technologies: form.Technologies,
         })
       });
-      setShowModal(false);
-      await reload();
-      if (!isPopup) window.location.reload();
-    } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
+      const res = await resp.json();
+      if (res.success) {
+        setShowModal(false);
+        toast.success(editingProj ? 'Project updated successfully' : 'New project added to portfolio');
+        await reload();
+        if (!isPopup) window.location.reload();
+      } else {
+        toast.error(res.error || 'Failed to sync project');
+      }
+    } catch (err) { 
+      toast.error('Network error during project sync'); 
+    } finally {
+      setGlobalLoading(false);
+    }
   };
 
   const handleDelete = async (project: any) => {
+    if (!project.ID && !project.id) return;
     if (!confirm('Are you sure you want to delete this project?')) return;
+    
     setGlobalLoading('Deleting project...');
     try {
-      await fetch(`${API_BASE}/projects`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...project, ProjectName: '[DELETED]' })
+      const pid = project.ID || project.id;
+      const resp = await fetch(`${API_BASE}/projects/${pid}`, { 
+        method: 'DELETE'
       });
-      await reload();
-      if (!isPopup) window.location.reload();
-    } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
+      const res = await resp.json();
+      if (res.success) {
+        toast.success('Project removed from portfolio');
+        await reload();
+        if (!isPopup) window.location.reload();
+      } else {
+        toast.error(res.error || 'Failed to delete');
+      }
+    } catch (err) { 
+      toast.error('Network failure during delete');
+    } finally {
+      setGlobalLoading(false);
+    }
   };
 
   const openEdit = (p: any) => {
     setEditingProj(p);
     setForm({
-      ProjectName: p.ProjectName, Client: p.Client, Domain: p.Domain, Role: p.Role,
-      StartDate: p.StartDate || '', EndDate: p.EndDate || '', IsOngoing: p.IsOngoing,
-      Description: p.Description || '', TeamSize: p.TeamSize || 0, Outcome: p.Outcome || '',
-      SkillsUsed: Array.isArray(p.SkillsUsed) ? p.SkillsUsed : [],
-      Technologies: Array.isArray(p.Technologies) ? p.Technologies : [],
+      ProjectName: p.ProjectName || p.project_name || '', 
+      Client: p.Client || p.client || '', 
+      Domain: p.Domain || p.domain || DOMAINS[0], 
+      Role: p.Role || p.role || '',
+      StartDate: p.StartDate || p.start_date || '', 
+      EndDate: p.EndDate || p.end_date || '', 
+      IsOngoing: p.IsOngoing || p.is_ongoing || false,
+      Description: p.Description || p.description || '', 
+      TeamSize: p.TeamSize || p.team_size || 0, 
+      Outcome: p.Outcome || p.outcome || '',
+      SkillsUsed: Array.isArray(p.SkillsUsed) ? p.SkillsUsed : Array.isArray(p.skills_used) ? p.skills_used : [],
+      Technologies: Array.isArray(p.Technologies) ? p.Technologies : Array.isArray(p.technologies) ? p.technologies : [],
       techInput: ''
     });
     setShowModal(true);
@@ -127,7 +184,7 @@ export default function ProjectsPage() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
             <div>
               <h1 style={{ fontSize: 26, fontWeight: 800, margin: '0 0 6px' }}>My Projects</h1>
-              <div style={{ color: T.sub, fontSize: 14 }}>Your QE project portfolio</div>
+              <div style={{ color: T.sub, fontSize: 14 }}>Your QI project portfolio</div>
             </div>
             <button onClick={openNew} style={{ background: 'linear-gradient(135deg, #8B5CF6, #3B82F6)', border: 'none', padding: '10px 20px', borderRadius: 10, color: '#fff', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', boxShadow: '0 4px 15px rgba(139,92,246,0.3)' }}>
               <Plus size={16} /> Add Project
@@ -138,16 +195,16 @@ export default function ProjectsPage() {
             {projects.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '40px', color: T.muted }}>No projects added yet.</div>
             ) : projects.map((p, i) => (
-              <div key={p.ProjectName + i} style={{ ...cardStyle }}>
+              <div key={((p as any).ProjectName || (p as any).project_name || i) + i} style={{ ...cardStyle }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 16 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Briefcase size={22} />
                     </div>
                     <div>
-                      <h3 style={{ fontSize: 18, margin: '0 0 4px', fontWeight: 800 }}>{p.ProjectName}</h3>
+                      <h3 style={{ fontSize: 18, margin: '0 0 4px', fontWeight: 800 }}>{(p as any).ProjectName || (p as any).project_name || 'Untitled Project'}</h3>
                       <div style={{ fontSize: 14, color: T.sub, fontWeight: 500 }}>
-                        {p.Role} <span style={{ opacity: 0.5 }}>·</span> {p.Domain} {p.Client ? `· ${p.Client}` : ''}
+                        {(p as any).Role || (p as any).role} <span style={{ opacity: 0.5 }}>·</span> {(p as any).Domain || (p as any).domain} {(p as any).Client || (p as any).client ? `· ${(p as any).Client || (p as any).client}` : ''}
                       </div>
                     </div>
                   </div>
@@ -158,34 +215,50 @@ export default function ProjectsPage() {
                 </div>
 
                 <div style={{ display: 'flex', gap: 24, fontSize: 13, color: T.sub, marginBottom: 20 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Calendar size={14} color={T.muted} /> {p.StartDate} — {p.IsOngoing ? 'Present' : p.EndDate}</div>
-                  {p.TeamSize > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color={T.muted} /> {p.TeamSize} members</div>}
+                  {(() => {
+                    const fmt = (d: string) => {
+                      if (!d) return '';
+                      // Handle ISO date: 2026-03-31T18:30:00.000Z -> 2026-03
+                      if (d.includes('T')) return d.slice(0, 7);
+                      // Handle YYYY-MM-DD: 2026-03-31 -> 2026-03
+                      if (d.length === 10) return d.slice(0, 7);
+                      return d;
+                    };
+                    const start = fmt((p as any).StartDate || (p as any).start_date);
+                    const end = (p as any).IsOngoing || (p as any).is_ongoing ? 'Present' : fmt((p as any).EndDate || (p as any).end_date);
+                    return (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <Calendar size={14} color={T.muted} /> {start} — {end}
+                      </div>
+                    );
+                  })()}
+                  {((p as any).TeamSize || (p as any).team_size) > 0 && <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}><Users size={14} color={T.muted} /> {(p as any).TeamSize || (p as any).team_size} members</div>}
                 </div>
 
-                {p.Description && (
+                {((p as any).Description || (p as any).description) && (
                   <p style={{ fontSize: 14, color: T.text, lineHeight: 1.6, marginBottom: 20 }}>
-                    {p.Description}
+                    {(p as any).Description || (p as any).description}
                   </p>
                 )}
 
-                {p.Outcome && (
+                {((p as any).Outcome || (p as any).outcome) && (
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, padding: 12, background: 'rgba(16,185,129,0.05)', borderLeft: '3px solid #10B981', borderRadius: '0 8px 8px 0', marginBottom: 20, fontSize: 13 }}>
                     <Target size={16} color="#10B981" style={{ flexShrink: 0, marginTop: 2 }} />
-                    <span style={{ color: T.text }}>{p.Outcome}</span>
+                    <span style={{ color: T.text }}>{(p as any).Outcome || (p as any).outcome}</span>
                   </div>
                 )}
 
-                {(p.SkillsUsed?.length > 0 || p.Technologies?.length > 0) && (
+                {(((p as any).SkillsUsed?.length > 0 || (p as any).skills_used?.length > 0) || ((p as any).Technologies?.length > 0 || (p as any).technologies?.length > 0)) && (
                   <div>
                     <div style={{ fontSize: 12, textTransform: 'uppercase', color: T.muted, letterSpacing: 1, marginBottom: 8 }}>Skills & Tech Stack</div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {p.SkillsUsed?.map((s: string) => <span key={s} style={{ background: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{s}</span>)}
-                      {p.Technologies?.map((t: string) => <span key={t} style={{ background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, padding: '4px 10px', borderRadius: 20, fontSize: 12 }}>{t}</span>)}
+                      {((p as any).SkillsUsed || (p as any).skills_used || [])?.map((s: string) => <span key={s} style={{ background: 'rgba(59,130,246,0.1)', color: '#3B82F6', padding: '4px 10px', borderRadius: 20, fontSize: 12, fontWeight: 600 }}>{s}</span>)}
+                      {((p as any).Technologies || (p as any).technologies || [])?.map((t: string) => <span key={t} style={{ background: 'transparent', border: `1px solid ${T.bdr}`, color: T.sub, padding: '4px 10px', borderRadius: 20, fontSize: 12 }}>{t}</span>)}
                     </div>
                   </div>
                 )}
                 
-                {p.IsAIExtracted && (
+                {((p as any).IsAIExtracted || (p as any).is_ai_extracted) && (
                   <div style={{ marginTop: 16, fontSize: 11, color: '#c084fc', display: 'flex', justifyContent: 'flex-end' }}>
                     🤖 AI Extracted
                   </div>

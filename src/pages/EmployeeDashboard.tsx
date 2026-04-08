@@ -5,7 +5,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '@/lib/AppContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { Bot, Map, PenTool, LayoutDashboard, Award, Briefcase, FileText } from 'lucide-react';
+import { Bot, Map, PenTool, LayoutDashboard, Award, Briefcase, FileText, GraduationCap, AlertTriangle, RefreshCw, Upload } from 'lucide-react';
 
 import { Radar } from 'react-chartjs-2';
 import {
@@ -15,32 +15,77 @@ import {
 
 ChartJS.register(RadialLinearScale, PointElement, LineElement, Filler, Tooltip, Legend, RadarController);
 
-export default function EmployeeDashboard() {
+import { AppData, Certification, Project } from '@/lib/appStore';
+import ZensarLoader from '@/components/ZensarLoader';
+
+import { useAuth } from '@/lib/authContext';
+
+export default function EmployeeDashboard({ 
+  overrideData, 
+  isPopup: propIsPopup, 
+  onTabChange: propOnTabChange 
+}: { 
+  overrideData?: AppData; 
+  isPopup?: boolean; 
+  onTabChange?: (tab: any) => void; 
+}) {
+  const { role } = useAuth();
   const navigate = useNavigate();
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, isLoading, isPopup, onTabChange } = useApp();
+  const appContext = useApp();
+  
+  const data = overrideData || appContext.data;
+  const isLoading = !overrideData && appContext.isLoading;
+  const isPopup = propIsPopup !== undefined ? propIsPopup : appContext.isPopup;
+  const onTabChange = propOnTabChange || appContext.onTabChange;
 
   if (isLoading) {
+    return <ZensarLoader fullScreen label="Synchronizing Zensar IQ Cloud..." />;
+  }
+  if (!data?.user) {
+    // If inside popup, show simpler error with option to close popup
+    if (isPopup) {
+      return (
+        <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 40, textAlign: 'center' }}>
+          <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+            <AlertTriangle size={40} />
+          </div>
+          <h2 style={{ fontSize: 20, fontWeight: 900, color: T.text, margin: 0 }}>Preview Data Unavailable</h2>
+          <p style={{ color: T.sub, fontSize: 14, maxWidth: 400, lineHeight: 1.6 }}>Unable to load employee data. Please close this popup and try reopening the employee preview.</p>
+          <button 
+            onClick={() => {
+              if (onTabChange) {
+                onTabChange('/admin');
+              }
+            }}
+            style={{ padding: '12px 24px', borderRadius: 12, background: '#3B82F6', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}
+          >
+            <RefreshCw size={18} /> Go Back
+          </button>
+        </div>
+      );
+    }
+    // Main app error
     return (
-      <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 24 }}>
-        <div style={{ position: 'relative', width: 100, height: 100 }}>
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '50%', border: '4px solid #3B82F6', opacity: 0.2 }} />
-          <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', borderRadius: '50%', border: '4px solid transparent', borderTopColor: '#3B82F6', animation: 'spin 1.5s linear infinite' }} />
-          <div style={{ position: 'absolute', top: 20, left: 20, width: 60, height: 60, borderRadius: '50%', background: 'linear-gradient(135deg, #6B2D8B, #3B82F6)', opacity: 0.8, animation: 'pulse 2s infinite' }} />
+      <div style={{ minHeight: '100vh', background: T.bg, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, padding: 40, textAlign: 'center' }}>
+        <div style={{ width: 80, height: 80, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 10 }}>
+          <AlertTriangle size={40} />
         </div>
-        <div style={{ textAlign: 'center' }}>
-          <h2 style={{ fontSize: 24, fontWeight: 800, color: T.text, marginBottom: 8, letterSpacing: -0.5 }}>Syncing Your Profile</h2>
-          <p style={{ color: T.sub, fontSize: 13, letterSpacing: 0.5, fontWeight: 500 }}>REACHING ZENSAR QE CLOUD...</p>
-        </div>
-        <style>{`
-          @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-          @keyframes pulse { 0%, 100% { transform: scale(1); opacity: 0.8; } 50% { transform: scale(1.1); opacity: 0.5; } }
-        `}</style>
+        <h2 style={{ fontSize: 24, fontWeight: 900, color: T.text, margin: 0 }}>Personnel Link Severed</h2>
+        <p style={{ color: T.sub, fontSize: 14, maxWidth: 400, lineHeight: 1.6 }}>We were unable to synchronize your professional digital twin with the Zensar IQ Cloud. This may be due to a session timeout or a temporary infrastructure disruption.</p>
+        <button 
+          onClick={() => {
+            localStorage.removeItem('skill_nav_session_id');
+            navigate('/login');
+          }}
+          style={{ padding: '12px 24px', borderRadius: 12, background: '#3B82F6', color: '#fff', border: 'none', fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8, marginTop: 10 }}
+        >
+          <RefreshCw size={18} /> Re-establish Secure Session
+        </button>
       </div>
     );
   }
-  if (!data?.user) return <div style={{ padding: '40px', color: T.text }}>Profile Not Found</div>;
 
   const { user, overallScore, completion, expertCount, expertSkills, gapCount, gapSkills, categoryAverages, certifications, projects } = data;
 
@@ -116,39 +161,27 @@ export default function EmployeeDashboard() {
             </div>
           </div>
 
-          {/* MIDDLE SECTION — 4 Quick Actions */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16 }}>
-            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Skills') : navigate('/employee/skills')} className="hover:scale-105 hover:border-blue-500">
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(59,130,246,0.1)', color: '#3B82F6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <PenTool size={22} />
-              </div>
-              <div style={{ fontWeight: 700 }}>Skills Matrix</div>
-              <div style={{ fontSize: 12, color: T.muted }}>Update your {completion}% completed ratings</div>
-            </div>
 
-            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Certifications') : navigate('/employee/certifications')} className="hover:scale-105 hover:border-emerald-500">
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(16,185,129,0.1)', color: '#10B981', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Award size={22} />
-              </div>
-              <div style={{ fontWeight: 700 }}>Certifications ({certifications.length})</div>
-              <div style={{ fontSize: 12, color: T.muted }}>Add technical credentials</div>
-            </div>
 
-            <div style={actionCard} onClick={() => isPopup && onTabChange ? onTabChange('Projects') : navigate('/employee/projects')} className="hover:scale-105 hover:border-purple-500">
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,0.1)', color: '#8B5CF6', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <Briefcase size={22} />
-              </div>
-              <div style={{ fontWeight: 700 }}>Projects ({projects.length})</div>
-              <div style={{ fontSize: 12, color: T.muted }}>Manage Zensar assignments</div>
-            </div>
-
-            <div style={actionCard} onClick={() => isPopup ? alert('Resume Builder is not available in the admin popup.') : navigate('/employee/resume')} className="hover:scale-105 hover:border-amber-500">
-              <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(245,158,11,0.1)', color: '#F59E0B', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 6 }}>
-                <FileText size={22} />
-              </div>
-              <div style={{ fontWeight: 700 }}>Resume Builder</div>
-              <div style={{ fontSize: 12, color: T.muted }}>Generate ATS-friendly CV</div>
-            </div>
+          {/* MIDDLE SECTION — Personnel Hub Command Deck */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 16, marginBottom: 24 }}>
+             {[
+               { label: 'Skills Matrix', path: '/employee/skills', icon: <PenTool size={20}/>, color: '#3B82F6', desc: 'Rate proficiency' },
+               { label: 'Certifications', path: '/employee/certifications', icon: <Award size={20}/>, color: '#10B981', desc: 'Entries: ' + certifications.length },
+               { label: 'Projects', path: '/employee/projects', icon: <Briefcase size={20}/>, color: '#F59E0B', desc: 'Entries: ' + projects.length },
+               { label: 'Education', path: '/employee/education', icon: <GraduationCap size={20}/>, color: '#8B5CF6', desc: 'Academic heritage' },
+               { label: 'Resume Upload', path: '/employee/resume-upload', icon: <Upload size={20}/>, color: '#3B82F6', desc: 'Import from resume' },
+               { label: 'AI Coach', path: '/employee/ai', icon: <Bot size={20}/>, color: '#c084fc', desc: 'Career intelligence', hideInPopup: true },
+               { label: 'resume converter', path: '/employee/resume-builder', icon: <PenTool size={20}/>, color: '#ec4899', desc: 'AI Sync Data', hideInPopup: true },
+             ].filter(item => !isPopup || !item.hideInPopup).map(item => (
+                <div key={item.label} style={{ ...actionCard, padding: '20px 16px', display: 'flex', flexDirection: 'column', alignItems: 'center', textAlign: 'center' }} onClick={() => isPopup && onTabChange ? onTabChange(item.path) : navigate(item.path)} className="hover:scale-105">
+                   <div style={{ width: 44, height: 44, borderRadius: 12, background: `${item.color}15`, color: item.color, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 12 }}>
+                     {item.icon}
+                   </div>
+                   <div style={{ fontWeight: 800, fontSize: 13 }}>{item.label}</div>
+                   <div style={{ fontSize: 10, color: T.muted }}>{item.desc}</div>
+                </div>
+             ))}
           </div>
 
           {/* BOTTOM SECTION */}
@@ -193,7 +226,7 @@ export default function EmployeeDashboard() {
               
               <div style={{ padding: 16, background: 'rgba(59,130,246,0.1)', borderRadius: 12, border: '1px solid rgba(59,130,246,0.2)', marginBottom: 16, fontSize: 13, color: T.text, lineHeight: 1.5 }}>
                 {expertCount >= 3 && certifications.length > 0 
-                  ? "Your strong automation foundation paired with external certs places you highly for Senior QE roles. Focus on AI testing to advance further."
+                  ? "Your strong automation foundation paired with external certs places you highly for Senior QI roles. Focus on AI testing to advance further."
                   : "Welcome to Skill Navigator! Start by completing your Skill Matrix to unlock your full professional roadmap and AI insights."}
               </div>
 

@@ -8,12 +8,24 @@ import { useApp } from '@/lib/AppContext';
 import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { Award, Plus, Trash2, Edit2, CheckCircle2, AlertCircle, X, ExternalLink } from 'lucide-react';
+import { toast } from '@/lib/ToastContext';
 
 
-export default function CertificationsPage() {
+export default function CertificationsPage({ 
+  isPopup: propIsPopup, 
+  onTabChange: propOnTabChange 
+}: { 
+  isPopup?: boolean; 
+  onTabChange?: (path: string) => void; 
+}) {
   const { dark } = useDark();
   const T = mkTheme(dark);
-  const { data, reload, isPopup, isLoading, setGlobalLoading } = useApp();
+  const { data, reload, isPopup: ctxIsPopup, isLoading, setGlobalLoading } = useApp();
+  
+  // Use props if provided, otherwise fall back to context
+  const isPopup = propIsPopup !== undefined ? propIsPopup : ctxIsPopup;
+  const onTabChange = propOnTabChange || (() => {});
+  
   const { employeeId } = useAuth();
   const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
   const [showModal, setShowModal] = useState(false);
@@ -30,39 +42,62 @@ export default function CertificationsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!form.CertName.trim() || !form.Provider.trim()) return alert('Name and Provider are required');
+    if (!form.CertName.trim() || !form.Provider.trim()) return toast.error('Name and Provider are required');
 
     setGlobalLoading('Saving certification...');
     try {
-      await fetch(`${API_BASE}/certifications', {
+      const resp = await fetch(`${API_BASE}/certifications`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          ID: activeEmpId,
-          ZensarID: activeEmpId,
+          id: editingCert?.ID || editingCert?.id,
           EmployeeID: activeEmpId,
-          EmployeeName: data?.user?.Name || data?.user?.name || activeEmpId,
-          ...form
+          employeeId: activeEmpId,
+          CertName: form.CertName,
+          Provider: form.Provider,
+          IssueDate: form.IssueDate,
+          ExpiryDate: form.ExpiryDate,
+          NoExpiry: form.NoExpiry,
+          CredentialID: form.CredentialID,
+          CredentialURL: form.CredentialURL
         })
       });
-      setShowModal(false);
-      await reload();
-      if (!isPopup) window.location.reload();
-    } catch (err) { alert('Failed to save'); setGlobalLoading(false); }
+      const res = await resp.json();
+      if (res.success) {
+        setShowModal(false);
+        toast.success(editingCert ? 'Credential updated' : 'Certification added');
+        await reload();
+        if (!isPopup) window.location.reload();
+      } else {
+        toast.error(res.error || 'Failed to sync');
+      }
+    } catch (err) { 
+      toast.error('Network failure'); 
+    } finally {
+      setGlobalLoading(false);
+    }
   };
 
   const handleDelete = async (cert: any) => {
+    const cid = cert.ID || cert.id;
+    if (!cid) return;
     if (!confirm('Are you sure you want to delete this certification?')) return;
+    
     setGlobalLoading('Deleting certification...');
     try {
-      await fetch(`${API_BASE}/certifications`, { 
-        method: 'POST', 
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...cert, CertName: '[DELETED]' })
-      });
-      await reload();
-      if (!isPopup) window.location.reload();
-    } catch (err) { alert('Failed to delete'); setGlobalLoading(false); }
+      const resp = await fetch(`${API_BASE}/certifications/${cid}`, { method: 'DELETE' });
+      if (resp.ok) {
+        toast.success('Certification removed');
+        await reload();
+        if (!isPopup) window.location.reload();
+      } else {
+        toast.error('Failed to remove');
+      }
+    } catch (err) { 
+      toast.error('Connection error'); 
+    } finally {
+      setGlobalLoading(false);
+    }
   };
 
   const openEdit = (c: any) => {
@@ -138,12 +173,23 @@ export default function CertificationsPage() {
                   </div>
                 </div>
                 
-                <div style={{ fontSize: 13, color: T.muted, marginBottom: 4 }}>
-                  <span style={{ color: T.sub }}>Issued:</span> {c.IssueDate || 'Unknown'}
-                </div>
-                <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
-                  <span style={{ color: T.sub }}>Expires:</span> {c.NoExpiry ? 'No Expiry' : (c.ExpiryDate || 'Unknown')}
-                </div>
+                {(() => {
+                  const fmt = (d: string) => {
+                    if (!d) return 'Unknown';
+                    if (d.includes('T')) return d.slice(0, 10); // ISO: 2026-03-31T18:30:00.000Z -> 2026-03-31
+                    return d;
+                  };
+                  return (
+                    <>
+                      <div style={{ fontSize: 13, color: T.muted, marginBottom: 4 }}>
+                        <span style={{ color: T.sub }}>Issued:</span> {fmt(c.IssueDate)}
+                      </div>
+                      <div style={{ fontSize: 13, color: T.muted, marginBottom: 16 }}>
+                        <span style={{ color: T.sub }}>Expires:</span> {c.NoExpiry ? 'No Expiry' : fmt(c.ExpiryDate)}
+                      </div>
+                    </>
+                  );
+                })()}
 
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: 12, fontWeight: 600 }}>
                   <span style={{ color: T.sub }}>Status:</span>

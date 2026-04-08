@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { SKILLS } from '@/lib/mockData';
 import { getEmployee, computeCompletion, saveSkillRatings } from '@/lib/localDB';
 import { useDark, mkTheme } from '@/lib/themeContext';
-import { apiGetSkills, apiGetEmployee, isServerAvailable } from '@/lib/api';
+import { apiGetSkills, apiGetEmployee, isServerAvailable, API_BASE } from '@/lib/api';
 import type { Employee } from '@/lib/types';
 import type { ProficiencyLevel } from '@/lib/types';
 import { ArrowLeft, Download, CheckCircle2, Clock, User, Mail, Phone,
@@ -27,6 +27,8 @@ export default function EmployeeDetailPage() {
   const T = mkTheme(dark);
 
   const [emp, setEmp] = useState<Employee | null | undefined>(undefined); // undefined = loading
+  const [certs, setCerts] = useState<any[]>([]);
+  const [projects, setProjects] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,6 +81,20 @@ export default function EmployeeDetailPage() {
 
             local = merged;
           }
+
+          // Fetch Certifications
+          const certRes = await fetch(`${API_BASE}/certifications/${id}`);
+          if (certRes.ok) {
+            const cData = await certRes.json();
+            setCerts(cData.certifications || []);
+          }
+
+          // Fetch Projects
+          const projRes = await fetch(`${API_BASE}/projects/${id}`);
+          if (projRes.ok) {
+            const pData = await projRes.json();
+            setProjects(pData.projects || []);
+          }
         }
       } catch { /* server unavailable — use localStorage */ }
 
@@ -114,8 +130,6 @@ export default function EmployeeDetailPage() {
   const ratedCompletion = computeCompletion(emp.skills);
   const completion = Math.max(ratedCompletion, emp.overallCapability);
   const ratedSkills = SKILLS.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
-  const aiDetectedCount = emp.skills.filter(r => r.aiDetected && r.selfRating > 0).length;
-  const aiUsagePct = ratedSkills.length > 0 ? Math.round((aiDetectedCount / ratedSkills.length) * 100) : 0;
   const categories = [...new Set(SKILLS.map(s => s.category))];
 
   const card: React.CSSProperties = {
@@ -133,12 +147,9 @@ export default function EmployeeDetailPage() {
 
         {/* ── Profile Header ── */}
         <div style={{ ...card, display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', marginBottom: 24 }}>
-          {/* Avatar */}
           <div style={{ width: 64, height: 64, borderRadius: 18, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: '#fff', flexShrink: 0 }}>
             {emp.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
           </div>
-
-          {/* Info */}
           <div style={{ flex: 1, minWidth: 200 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', marginBottom: 4 }}>
               <h1 style={{ fontSize: 22, fontWeight: 800, color: T.text, fontFamily: "'Space Grotesk',sans-serif", margin: 0 }}>{emp.name}</h1>
@@ -149,105 +160,80 @@ export default function EmployeeDetailPage() {
             </div>
             <div style={{ fontSize: 13, color: T.sub, marginBottom: 10 }}>{emp.designation} · {emp.department}</div>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-              {emp.email     && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Mail size={12}/>{emp.email}</span>}
-              {emp.phone     && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Phone size={12}/>{emp.phone}</span>}
-              {emp.location  && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><MapPin size={12}/>{emp.location}</span>}
-              {emp.yearsIT > 0    && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Briefcase size={12}/>{emp.yearsIT}y IT · {emp.yearsZensar}y Zensar</span>}
+              {emp.email && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Mail size={12}/>{emp.email}</span>}
+              {emp.phone && <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Phone size={12}/>{emp.phone}</span>}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><MapPin size={12}/>{emp.location || 'Remote'}</span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 12, color: T.muted }}><Briefcase size={12}/>{emp.yearsIT}y IT · {emp.yearsZensar}y Zensar</span>
             </div>
           </div>
-
-          {/* Gauges: Completion + AI Usage */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center', flexShrink: 0 }}>
-            {/* Completion ring */}
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ position: 'relative', width: 90, height: 90, margin: '0 auto 6px' }}>
-                <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                  <circle cx="18" cy="18" r="15.915" fill="none" stroke={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'} strokeWidth="3.5" />
-                  <circle cx="18" cy="18" r="15.915" fill="none" stroke={completion >= 70 ? '#10B981' : completion >= 40 ? '#F59E0B' : '#EF4444'} strokeWidth="3.5"
-                    strokeDasharray={`${completion} ${100 - completion}`} strokeLinecap="round" />
-                </svg>
-                <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: T.text }}>{completion}%</span>
-                </div>
-              </div>
-              <div style={{ fontSize: 11, color: T.muted }}>{ratedSkills.length}/32 rated</div>
+          <div style={{ textAlign: 'center' }}>
+            <div style={{ position: 'relative', width: 70, height: 70, margin: '0 auto 4px' }}>
+              <svg viewBox="0 0 36 36" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+                <circle cx="18" cy="18" r="15.915" fill="none" stroke={dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)'} strokeWidth="3.5" />
+                <circle cx="18" cy="18" r="15.915" fill="none" stroke={completion >= 70 ? '#10B981' : completion >= 40 ? '#F59E0B' : '#EF4444'} strokeWidth="3.5"
+                  strokeDasharray={`${completion} ${100 - completion}`} strokeLinecap="round" />
+              </svg>
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 800 }}>{completion}%</div>
             </div>
-
+            <div style={{ fontSize: 10, color: T.muted }}>Readiness</div>
           </div>
-
-          {/* Export */}
-          <button onClick={() => { exportEmployeeToExcel(emp.id); toast.success(`${emp.name}'s report exported!`); }}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: 7, padding: '10px 18px', borderRadius: 10, background: 'rgba(16,185,129,0.12)', border: '1px solid rgba(16,185,129,0.3)', color: '#34D399', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
-            <Download size={14} /> Export
-          </button>
         </div>
 
         {/* ── Category Breakdown ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 10, marginBottom: 24 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px,1fr))', gap: 12, marginBottom: 32 }}>
           {categories.map(cat => {
             const catSkills = SKILLS.filter(s => s.category === cat);
             const rated = catSkills.filter(s => (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
-            const avgLevel = rated.length > 0
-              ? rated.reduce((sum, s) => sum + (emp.skills.find(r => r.skillId === s.id)?.selfRating ?? 0), 0) / rated.length
-              : 0;
             const pct = Math.round((rated.length / catSkills.length) * 100);
             const color = CAT_COLOR[cat] || '#3B82F6';
             return (
               <div key={cat} style={{ padding: '14px', borderRadius: 12, background: `${color}0c`, border: `1px solid ${color}28` }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                  <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{cat}</span>
-                  <span style={{ fontSize: 12, fontWeight: 700, color }}>Avg {avgLevel.toFixed(1)}/3</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{cat}</span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color }}>{rated.length}/{catSkills.length}</span>
                 </div>
-                <div style={{ height: 5, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)', marginBottom: 5 }}>
+                <div style={{ height: 4, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.06)' }}>
                   <div style={{ height: '100%', width: `${pct}%`, borderRadius: 999, background: color }} />
                 </div>
-                <div style={{ fontSize: 11, color: T.muted }}>{rated.length}/{catSkills.length} rated · {pct}%</div>
               </div>
             );
           })}
         </div>
 
         {/* ── AI Intelligence Panel ── */}
-        {emp.skills.filter(s => s.selfRating > 0).length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            {/* Section header */}
+        {emp.skills.some(s => s.selfRating > 0) && (
+          <div style={{ marginBottom: 32 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
               <div style={{ width: 34, height: 34, borderRadius: 10, background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <Brain size={17} color="#fff" />
               </div>
-              <div>
-                <div style={{ fontWeight: 800, fontSize: 16, color: T.text, fontFamily: "'Space Grotesk',sans-serif" }}>AI Skill Intelligence</div>
-                <div style={{ fontSize: 12, color: T.sub }}>Auto-generated insights from {emp.name}'s skill profile</div>
-              </div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>AI Professional Intelligence</h3>
             </div>
 
-            {/* Career Insight + Readiness */}
             {(() => {
               const insight = generateCareerInsight(emp.skills, emp.name);
               const readColor = insight.readinessScore >= 75 ? '#10B981' : insight.readinessScore >= 50 ? '#F59E0B' : '#EF4444';
-              const readLabel = insight.readinessScore >= 75 ? 'Senior Ready' : insight.readinessScore >= 50 ? 'Mid-Level' : 'Junior Level';
               return (
-                <div style={{ ...card, background: 'linear-gradient(135deg,rgba(59,130,246,0.06),rgba(139,92,246,0.06))', border: '1px solid rgba(59,130,246,0.2)', marginBottom: 12 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: T.text, marginBottom: 4 }}>{insight.headline}</div>
-                      <span style={{ padding: '3px 12px', borderRadius: 999, fontSize: 11, fontWeight: 700, background: `${readColor}20`, color: readColor, border: `1px solid ${readColor}40` }}>{readLabel} · {insight.readinessScore}% Senior Readiness</span>
-                    </div>
+                <div style={{ ...card, background: 'linear-gradient(135deg,rgba(59,130,246,0.05),rgba(139,92,246,0.05))', border: '1px solid rgba(59,130,246,0.15)', marginBottom: 16 }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, marginBottom: 8 }}>{insight.headline}</div>
+                  <div style={{ marginBottom: 16 }}>
+                     <div style={{ display:'flex', justifyContent:'space-between', fontSize:11, fontWeight:700, marginBottom:4 }}>
+                        <span style={{ color: readColor }}>Senior Readiness Score</span>
+                        <span>{insight.readinessScore}%</span>
+                     </div>
+                     <div style={{ height: 6, borderRadius: 999, background: 'rgba(0,0,0,0.05)' }}>
+                        <div style={{ height: '100%', width: `${insight.readinessScore}%`, borderRadius: 999, background: readColor }} />
+                     </div>
                   </div>
-                  {/* Readiness bar */}
-                  <div style={{ height: 8, borderRadius: 999, background: dark ? 'rgba(255,255,255,0.07)' : 'rgba(0,0,0,0.07)', marginBottom: 14, position: 'relative' }}>
-                    <div style={{ height: '100%', width: `${insight.readinessScore}%`, borderRadius: 999, background: `linear-gradient(90deg,#EF4444,#F59E0B,#10B981)`, boxShadow: `0 0 10px ${readColor}50` }} />
-                  </div>
-                  {/* 3 insight cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(250px,1fr))', gap: 12 }}>
                     {[
-                      { label: '🎯 Market Positioning', text: insight.positioning, color: '#3B82F6' },
-                      { label: '⚡ Competitive Edge', text: insight.competitiveEdge, color: '#8B5CF6' },
-                      { label: '🚀 Next Milestone', text: insight.nextMilestone, color: '#10B981' },
+                      { label: 'Market Positioning', text: insight.positioning, color: '#3B82F6' },
+                      { label: 'Competitive Edge', text: insight.competitiveEdge, color: '#8B5CF6' },
+                      { label: 'Next Milestone', text: insight.nextMilestone, color: '#10B981' },
                     ].map(item => (
-                      <div key={item.label} style={{ padding: '12px 14px', borderRadius: 10, background: `${item.color}09`, border: `1px solid ${item.color}25` }}>
-                        <div style={{ fontSize: 10, fontWeight: 800, color: item.color, marginBottom: 4, letterSpacing: '0.06em' }}>{item.label}</div>
-                        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.6 }}>{item.text}</div>
+                      <div key={item.label} style={{ padding: 12, borderRadius: 10, background: 'rgba(255,255,255,0.3)', border: `1px solid rgba(0,0,0,0.05)` }}>
+                        <div style={{ fontSize: 10, fontWeight: 800, color: item.color, marginBottom: 4, textTransform:'uppercase' }}>{item.label}</div>
+                        <div style={{ fontSize: 12, color: T.sub, lineHeight: 1.5 }}>{item.text}</div>
                       </div>
                     ))}
                   </div>
@@ -255,102 +241,106 @@ export default function EmployeeDetailPage() {
               );
             })()}
 
-            {/* Top Priority Skills */}
-            {(() => {
-              const priorities = computeSkillPriorities(emp.skills).filter(s => s.gap > 0).slice(0, 4);
-              if (priorities.length === 0) return null;
-              return (
-                <div style={{ ...card, marginBottom: 12 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-                    <Zap size={16} color="#F59E0B" />
-                    <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>Top Skills to Develop</span>
-                    <span style={{ fontSize: 11, color: T.muted, marginLeft: 'auto' }}>Ranked by market impact × gap</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {priorities.map((s, i) => {
-                      const colors = ['#EF4444','#F59E0B','#3B82F6','#8B5CF6'];
-                      const c = colors[i];
-                      return (
-                        <div key={s.skillId} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 10, background: `${c}08`, border: `1px solid ${c}25` }}>
-                          <span style={{ width: 22, height: 22, borderRadius: 6, background: `${c}20`, border: `1px solid ${c}40`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 800, color: c, flexShrink: 0 }}>#{i+1}</span>
-                          <div style={{ flex: 1 }}>
-                            <div style={{ fontWeight: 600, fontSize: 13, color: T.text }}>{s.name}</div>
-                            <div style={{ fontSize: 11, color: T.muted }}>Level {s.currentLevel} → {Math.min(3, s.currentLevel+1)} · {s.timeToIntermediate}</div>
-                          </div>
-                          <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                            <div style={{ fontSize: 12, fontWeight: 800, color: c }}>P:{s.priorityScore.toFixed(0)}</div>
-                            <div style={{ fontSize: 10, color: T.muted }}>Demand {s.marketDemand}%</div>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Top Cert Recommendations */}
-            {(() => {
-              const certs = recommendCertifications(emp.skills, 3);
-              return (
-                <div style={card}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginBottom: 12 }}>
-                    <Award size={16} color="#F59E0B" />
-                    <span style={{ fontWeight: 700, fontSize: 14, color: T.text }}>Recommended Certifications</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {certs.map((cert, i) => (
-                      <div key={cert.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 12, padding: '11px 14px', borderRadius: 10, background: i===0?'rgba(245,158,11,0.06)': (dark?'rgba(255,255,255,0.02)':'rgba(0,0,0,0.02)'), border: `1px solid ${i===0?'rgba(245,158,11,0.3)':T.bdr}` }}>
-                        <div style={{ width: 28, height: 28, borderRadius: 8, background: 'rgba(245,158,11,0.15)', border: '1px solid rgba(245,158,11,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 800, color: '#F59E0B', flexShrink: 0 }}>#{i+1}</div>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div style={{ fontWeight: 700, fontSize: 13, color: T.text, marginBottom: 2 }}>{cert.name}</div>
-                          <div style={{ fontSize: 11, color: T.muted, marginBottom: 4 }}>{cert.provider} · {cert.difficulty} · {cert.durationWeeks}w · Market: {cert.marketValue}%</div>
-                          <div style={{ fontSize: 11, color: '#A78BFA', fontStyle: 'italic' }}>💡 {cert.whyRecommended}</div>
-                        </div>
-                        <a href={cert.url} target="_blank" rel="noopener noreferrer" style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 7, background: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.25)', color: '#60A5FA', fontSize: 11, fontWeight: 600, textDecoration: 'none', display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <ExternalLink size={10}/> Open
-                        </a>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 16 }}>
+               {/* Skill Gaps */}
+               {(() => {
+                 const priorities = computeSkillPriorities(emp.skills).filter(s => s.gap > 0).slice(0, 3);
+                 return (
+                   <div style={card}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                         <Zap size={16} color="#F59E0B" />
+                         <span style={{ fontWeight: 700, fontSize: 14 }}>Priority Growth Areas</span>
                       </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {priorities.map(s => (
+                          <div key={s.skillId} style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                             <span style={{ fontSize:13 }}>{s.name}</span>
+                             <span style={{ fontSize:11, fontWeight:700, color:'#3B82F6', background:'rgba(59,130,246,0.1)', padding:'2px 8px', borderRadius:8 }}>Level {s.currentLevel} → {s.currentLevel+1}</span>
+                          </div>
+                        ))}
+                      </div>
+                   </div>
+                 );
+               })()}
+
+               {/* Recommendations */}
+               {(() => {
+                 const rCerts = recommendCertifications(emp.skills, 3);
+                 return (
+                   <div style={card}>
+                      <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:16 }}>
+                         <Award size={16} color="#10B981" />
+                         <span style={{ fontWeight: 700, fontSize: 14 }}>AI Recommendations</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {rCerts.slice(0, 2).map(c => (
+                          <div key={c.id} style={{ fontSize:12, lineHeight:1.4 }}>
+                             <div style={{ fontWeight:700 }}>{c.name}</div>
+                             <div style={{ color:T.muted }}>{c.whyRecommended.slice(0, 60)}...</div>
+                          </div>
+                        ))}
+                      </div>
+                   </div>
+                 );
+               })()}
+            </div>
           </div>
         )}
 
-        {/* ── Full Skill Ratings ── */}
+        {/* ── Certifications & Projects ── */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))', gap: 24, marginBottom: 32 }}>
+           <div style={card}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                 <Award size={20} color="#F59E0B" />
+                 <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Certified Professional Qualifications</h3>
+              </div>
+              <div style={{ display:'grid', gap:10 }}>
+                 {certs.length === 0 ? <div style={{color:T.muted, fontSize:13}}>No valid certifications found.</div> : certs.map((c, i) => (
+                   <div key={i} style={{ padding:14, borderRadius:12, background:dark?'rgba(255,255,255,0.03)':'#fafafa', border:`1px solid ${T.bdr}` }}>
+                      <div style={{ fontWeight:700, fontSize:14, marginBottom:2 }}>{c.CertName}</div>
+                      <div style={{ fontSize:12, color:T.sub }}>{c.Provider} · Issued: {c.IssueDate}</div>
+                      {c.CredentialURL && <a href={c.CredentialURL} target="_blank" rel="noreferrer" style={{ fontSize:11, color:'#3B82F6', marginTop:4, display:'inline-block' }}>View Credential →</a>}
+                   </div>
+                 ))}
+              </div>
+           </div>
+           <div style={card}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
+                 <Briefcase size={20} color="#3B82F6" />
+                 <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Project Portfolio</h3>
+              </div>
+              <div style={{ display:'grid', gap:10 }}>
+                 {projects.length === 0 ? <div style={{color:T.muted, fontSize:13}}>No projects found.</div> : projects.map((p, i) => (
+                   <div key={i} style={{ padding:14, borderRadius:12, background:dark?'rgba(255,255,255,0.03)':'#fafafa', border:`1px solid ${T.bdr}` }}>
+                      <div style={{ fontWeight:700, fontSize:14 }}>{p.ProjectName}</div>
+                      <div style={{ fontSize:12, color:T.sub }}>{p.Role} · {p.StartDate} - {p.EndDate || 'Present'}</div>
+                   </div>
+                 ))}
+              </div>
+           </div>
+        </div>
+
+        {/* ── Full Skill Matrix ── */}
         <div style={card}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 18 }}>
-            <TrendingUp size={18} color="#60A5FA" />
-            <span style={{ fontWeight: 700, fontSize: 16, color: T.text }}>Full Skill Ratings</span>
-            <span style={{ fontSize: 12, color: T.muted, marginLeft: 'auto' }}>{ratedSkills.length} of {SKILLS.length} rated</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 20 }}>
+            <TrendingUp size={18} color="#3B82F6" />
+            <h3 style={{ margin:0, fontSize:16, fontWeight:800 }}>Technical Proficiency Matrix</h3>
+            <span style={{ fontSize: 12, color: T.muted, marginLeft: 'auto' }}>{ratedSkills.length} Skills Evaluated</span>
           </div>
-          <div style={{ display: 'grid', gap: 8 }}>
+          <div style={{ display: 'grid', gap: 20 }}>
             {categories.map(cat => {
               const catSkills = SKILLS.filter(s => s.category === cat);
-              const color = CAT_COLOR[cat] || '#3B82F6';
               return (
                 <div key={cat}>
-                  <div style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: 6, marginTop: 12 }}>{cat}</div>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px,1fr))', gap: 6 }}>
+                  <div style={{ fontSize: 11, fontWeight: 900, color: CAT_COLOR[cat], textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>{cat}</div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 8 }}>
                     {catSkills.map(skill => {
                       const r = emp.skills.find(rt => rt.skillId === skill.id);
                       const lvl = r?.selfRating ?? 0;
                       return (
-                        <div key={skill.id} style={{ padding: '10px 12px', borderRadius: 10, background: `${LVL_COLOR[lvl]}0a`, border: `1px solid ${LVL_COLOR[lvl]}28`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                          <div>
-                            <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{skill.name}</div>
-                            {r?.managerRating != null && (
-                              <div style={{ fontSize: 10, color: T.muted, marginTop: 1 }}>
-                                Mgr: {LVL_LABEL[r.managerRating]} {r.validated ? '✅' : '⏳'}
-                              </div>
-                            )}
-                          </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <div style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10, fontWeight: 700, background: `${LVL_COLOR[lvl]}20`, color: LVL_COLOR[lvl] }}>{LVL_LABEL[lvl]}</div>
-                            {r?.validated && <CheckCircle2 size={11} color="#34D399" style={{ marginTop: 3, float: 'right' }} />}
-                          </div>
+                        <div key={skill.id} style={{ padding: '12px', borderRadius: 10, background: `${LVL_COLOR[lvl]}08`, border: `1px solid ${LVL_COLOR[lvl]}25`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <span style={{ fontSize:13, fontWeight:600 }}>{skill.name}</span>
+                          <span style={{ fontSize:10, fontWeight:800, padding:'2px 8px', borderRadius:20, background:`${LVL_COLOR[lvl]}15`, color:LVL_COLOR[lvl] }}>{LVL_LABEL[lvl]}</span>
                         </div>
                       );
                     })}

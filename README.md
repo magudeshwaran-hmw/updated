@@ -78,4 +78,4 @@ npm run dev:full
 
 ---
 
-**Last Updated:** March 2026 | **Engineering Lead:** Zensar QE Team
+**Last Updated:** March 2026 | **Engineering Lead:** Zensar QI Team

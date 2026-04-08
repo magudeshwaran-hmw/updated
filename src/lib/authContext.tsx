@@ -10,7 +10,7 @@ interface AuthState {
 }
 
 interface AuthContextType extends AuthState {
-  login: (role: UserRole, employeeId?: string, name?: string) => void;
+  login: (...args: any[]) => void;
   logout: () => void;
 }
 
@@ -18,12 +18,11 @@ const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [auth, setAuth] = useState<AuthState>(() => {
-    // Restore session from localStorage on load
     const session = loadSession();
     if (session) {
       return {
         isLoggedIn: true,
-        role: session.role,
+        role: session.role as UserRole,
         employeeId: session.employeeId,
         name: session.name,
       };
@@ -31,22 +30,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return { isLoggedIn: false, role: null, employeeId: null, name: null };
   });
 
-  const login = useCallback((role: UserRole, employeeId?: string, name?: string) => {
-    const empId = employeeId || (role === 'employee' ? 'emp1' : null);
-    const displayName = name || (role === 'admin' ? 'Admin User' : 'Employee');
-    const newAuth = {
+  const login = useCallback((...args: any[]) => {
+    let role: UserRole;
+    let employeeId: string | null = null;
+    let name: string | null = null;
+
+    // Handle Object-based login (e.g. login(employeeObj))
+    if (typeof args[0] === 'object' && args[0] !== null) {
+      const obj = args[0];
+      role = obj.role || 'employee';
+      employeeId = String(obj.zensar_id || obj.id || obj.ID || obj.ZensarID || obj.employeeId || '');
+      name = obj.name || obj.Name || (role === 'admin' ? 'Admin User' : 'Employee');
+    } 
+    // Handle Positional login (e.g. login('admin', 'id', 'name'))
+    else {
+      role = args[0];
+      employeeId = String(args[1] || '');
+      name = args[2] || (role === 'admin' ? 'Admin User' : 'Employee');
+    }
+
+    if (!role) role = 'employee';
+    if (!employeeId) employeeId = 'emp1';
+
+    const newAuth: AuthState = {
       isLoggedIn: true,
       role,
-      employeeId: empId,
-      name: displayName,
+      employeeId: employeeId,
+      name: name,
     };
+
+    console.log('[Auth] Switching Session:', newAuth);
+    
+    // 1. Update State
     setAuth(newAuth);
-    saveSession({ employeeId: empId || '', role, name: displayName });
+    
+    // 2. Persist to LocalStorage (This updates skill_nav_session_id)
+    saveSession({ employeeId: employeeId, role, name: name });
+    
+    // 3. Force Global Refresh
+    const event = new CustomEvent('skill_nav_session_changed', { detail: newAuth });
+    window.dispatchEvent(event);
+    
+    // Compatibility with standard Event for older listeners
+    window.dispatchEvent(new Event('skill_nav_session_changed'));
   }, []);
 
   const logout = useCallback(() => {
     setAuth({ isLoggedIn: false, role: null, employeeId: null, name: null });
     clearSession();
+    window.dispatchEvent(new Event('skill_nav_session_changed'));
   }, []);
 
   return <AuthContext.Provider value={{ ...auth, login, logout }}>{children}</AuthContext.Provider>;

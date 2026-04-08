@@ -12,9 +12,9 @@ export const AIHubHeader = () => {
   );
 
   const level =
-    completion >= 80 ? 'Senior QE' :
-    completion >= 50 ? 'Mid-Level QE' :
-    completion >= 25 ? 'Junior QE' : 'Associate QE';
+    completion >= 80 ? 'Senior QI' :
+    completion >= 50 ? 'Mid-Level QI' :
+    completion >= 25 ? 'Junior QI' : 'Associate QI';
 
   return (
     <div className="glass-card stagger-1" style={{
@@ -40,7 +40,7 @@ export const AIHubHeader = () => {
                 {user?.Name || 'Loading…'}
               </div>
               <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
-                {user?.Designation || 'QE Engineer'} · ID: {user?.ID || user?.ZensarID || '—'}
+                {user?.Designation || 'QI Engineer'} · ID: {user?.ID || user?.ZensarID || '—'}
               </div>
             </div>
           </div>
@@ -54,7 +54,7 @@ export const AIHubHeader = () => {
               {level}
             </div>
             <div style={{ fontSize: 12, color: 'var(--text-muted)' }}>
-              Zensar Quality Engineering
+              Zensar Quality Intelligence
             </div>
           </div>
         </div>
@@ -93,7 +93,7 @@ export const AIHubHeader = () => {
       {/* Progress bar */}
       <div style={{ marginTop: 20 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>QE Matrix Progress</span>
+          <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>QI Matrix Progress</span>
           <span style={{ fontSize: 11, color: '#00A3E0' }}>{expertSkills.length + gapSkills.length}/32 skills rated</span>
         </div>
         <div style={{ height: 6, borderRadius: 6, background: 'rgba(255,255,255,0.06)', overflow: 'hidden' }}>

@@ -6,7 +6,7 @@
 import { SKILLS } from './mockData';
 import { SkillRating } from './types';
 
-// ─── Market demand scores per skill (2025 QE market data) ─────────────────────
+// ─── Market demand scores per skill (2025 QI market data) ─────────────────────
 export const MARKET_DEMAND: Record<string, number> = {
   s1: 85,  // Selenium
   s2: 72,  // Appium
@@ -95,7 +95,7 @@ export const CERTIFICATIONS: Certification[] = [
     category: 'TestingType', skillIds: ['s24', 's1', 's32'],
     difficulty: 'Advanced', durationWeeks: 8, marketValue: 91,
     url: 'https://www.istqb.org/certifications/advanced-level-test-automation-engineer',
-    description: 'Advanced automation engineering cert. High employer recognition for senior QE roles.',
+    description: 'Advanced automation engineering cert. High employer recognition for senior QI roles.',
   },
   {
     id: 'c3', name: 'Selenium WebDriver with Java', provider: 'Udemy',
@@ -109,7 +109,7 @@ export const CERTIFICATIONS: Certification[] = [
     category: 'DevOps', skillIds: ['s27', 's28', 's29', 's30'],
     difficulty: 'Advanced', durationWeeks: 12, marketValue: 94,
     url: 'https://aws.amazon.com/certification/certified-devops-engineer-professional/',
-    description: 'Premium cloud DevOps cert. 40% salary boost on average for QE professionals.',
+    description: 'Premium cloud DevOps cert. 40% salary boost on average for QI professionals.',
   },
   {
     id: 'c5', name: 'API Testing with Postman', provider: 'Postman Academy',
@@ -123,21 +123,21 @@ export const CERTIFICATIONS: Certification[] = [
     category: 'Technology', skillIds: ['s7', 's24'],
     difficulty: 'Intermediate', durationWeeks: 5, marketValue: 85,
     url: 'https://testautomationu.applitools.com/python-tutorial/',
-    description: 'Free TAU course. Python is the #1 skill for modern QE automation engineers.',
+    description: 'Free TAU course. Python is the #1 skill for modern QI automation engineers.',
   },
   {
     id: 'c7', name: 'AI Testing & Prompt Engineering', provider: 'Coursera',
     category: 'AI', skillIds: ['s31', 's32'],
     difficulty: 'Intermediate', durationWeeks: 4, marketValue: 96,
     url: 'https://www.coursera.org/specializations/prompt-engineering',
-    description: 'Fastest-growing QE skill set in 2025. AI testing is the future of quality engineering.',
+    description: 'Fastest-growing QI skill set in 2025. AI testing is the future of quality engineering.',
   },
   {
     id: 'c8', name: 'Docker for QA Engineers', provider: 'Udemy',
     category: 'DevOps', skillIds: ['s29', 's28'],
     difficulty: 'Intermediate', durationWeeks: 3, marketValue: 83,
     url: 'https://www.udemy.com/course/docker-and-kubernetes-the-complete-guide/',
-    description: 'Essential DevOps skill for modern QE. Container testing is now expected at senior level.',
+    description: 'Essential DevOps skill for modern QI. Container testing is now expected at senior level.',
   },
   {
     id: 'c9', name: 'Performance Testing with JMeter', provider: 'Blazemeter University',
@@ -151,7 +151,7 @@ export const CERTIFICATIONS: Certification[] = [
     category: 'Application', skillIds: ['s16'],
     difficulty: 'Intermediate', durationWeeks: 6, marketValue: 87,
     url: 'https://owasp.org/www-project-web-security-testing-guide/',
-    description: 'Security testing is fastest-growing QE niche. OWASP foundation is essential.',
+    description: 'Security testing is fastest-growing QI niche. OWASP foundation is essential.',
   },
 ];
 
@@ -334,16 +334,16 @@ export function generateCareerInsight(ratings: SkillRating[], name: string): {
   const avgGapToSenior = benchmarks.reduce((a, b) => a + b.gapToSenior, 0) / benchmarks.length;
   const readinessScore = Math.max(0, Math.min(100, Math.round(100 - (avgGapToSenior / 3) * 100)));
 
-  const level = readinessScore >= 75 ? 'Senior QE Engineer' : readinessScore >= 50 ? 'Mid-Level QE Engineer' : 'Junior QE Engineer';
+  const level = readinessScore >= 75 ? 'Senior QI Engineer' : readinessScore >= 50 ? 'Mid-Level QI Engineer' : 'Junior QI Engineer';
 
   return {
     headline: expert.length > 0
       ? `${name} — Expert in ${expert.slice(0, 2).map(s => s.name).join(' & ')}`
-      : `${name} — Building QE expertise across ${[...new Set(SKILLS.filter(s => (ratings.find(r=>r.skillId===s.id)?.selfRating??0)>0).map(s=>s.category))].length} categories`,
+      : `${name} — Building QI expertise across ${[...new Set(SKILLS.filter(s => (ratings.find(r=>r.skillId===s.id)?.selfRating??0)>0).map(s=>s.category))].length} categories`,
     positioning: `Based on your skill profile, you are positioned at ${level} level (${readinessScore}% senior readiness). You have ${expert.length} Expert-level skills and ${beginner.length} Beginner-level skills needing attention.`,
     competitiveEdge: expert.length > 0
-      ? `Your competitive advantage lies in ${expert.slice(0,2).map(s=>s.name).join(' and ')} — both high-demand skills in today's QE market. Combined with ${completion}% skill coverage, you stand above the average QA engineer profile.`
-      : `With ${completion}% skill coverage and active ratings across ${[...new Set(SKILLS.filter(s=>(ratings.find(r=>r.skillId===s.id)?.selfRating??0)>0).map(s=>s.category))].length} categories, you are building a solid multi-domain QE foundation.`,
+      ? `Your competitive advantage lies in ${expert.slice(0,2).map(s=>s.name).join(' and ')} — both high-demand skills in today's QI market. Combined with ${completion}% skill coverage, you stand above the average QA engineer profile.`
+      : `With ${completion}% skill coverage and active ratings across ${[...new Set(SKILLS.filter(s=>(ratings.find(r=>r.skillId===s.id)?.selfRating??0)>0).map(s=>s.category))].length} categories, you are building a solid multi-domain QI foundation.`,
     nextMilestone: top3.length > 0
       ? `Your top priority to maximize career impact: master ${top3[0].name} (Priority Score: ${top3[0].priorityScore.toFixed(0)}, Market Demand: ${top3[0].marketDemand}%). This single skill upgrade could significantly enhance your profile.`
       : `Complete manager validation for your Expert skills to gain official recognition and increase your visibility for senior opportunities.`,

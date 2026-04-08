@@ -37,11 +37,11 @@ export async function checkOllamaStatus(): Promise<OllamaStatus> {
       return { available: false, model: null, modelShort: null, error: 'No models installed. Run: ollama pull llama3' };
     }
 
-    // Prefer small/fast models to avoid CUDA OOM; avoid llama2-70b etc.
-    const preferred = ['phi', 'gemma', 'mistral', 'llama3', 'qwen', 'llava'];
+    // Prefer small/fast models to avoid CUDA OOM; include newer efficient models
+    const preferred = ['qwen2.5:0.5b', 'qwen', 'phi3', 'phi', 'gemma', 'mistral', 'llama3'];
     let chosen = models[0];
     for (const p of preferred) {
-      const found = models.find(m => m.toLowerCase().startsWith(p));
+      const found = models.find(m => m.toLowerCase().includes(p.toLowerCase()));
       if (found) { chosen = found; break; }
     }
 
@@ -50,10 +50,10 @@ export async function checkOllamaStatus(): Promise<OllamaStatus> {
       model: chosen,
       modelShort: chosen.split(':')[0],
     };
-  } catch {
+  } catch (err) {
     return {
       available: false, model: null, modelShort: null,
-      error: 'Cannot connect. Start Ollama: set OLLAMA_ORIGINS=* && ollama serve',
+      error: `Local AI (Ollama) is not reachable. Run: "set OLLAMA_ORIGINS=* && ollama serve" in a terminal.`,
     };
   }
 }
@@ -141,6 +141,15 @@ export async function extractTextFromFile(file: File): Promise<string> {
   });
 }
 
+export interface EducationEntry {
+  degree: string;
+  institution: string;
+  fieldOfStudy: string;
+  startDate: string;
+  endDate: string;
+  grade: string;
+}
+
 export interface PersonalDetails {
   name: string;
   email: string;
@@ -148,6 +157,8 @@ export interface PersonalDetails {
   designation: string;
   location: string;
   yearsIT: number;
+  education: EducationEntry[];
+  missingInfoGaps: string[];
 }
 
 /**
@@ -159,38 +170,55 @@ export async function extractPersonalDetailsAI(
   fullModelName: string
 ): Promise<PersonalDetails> {
   const snippet = text.slice(0, 2500);
-  const prompt = `Extract the following personal details from this resume. Reply ONLY with a JSON object, no explanation.
-
+  const prompt = `Extract personal details and education from this resume. Reply ONLY with JSON.
+  
 Resume:
 ${snippet}
 
 Reply with this exact JSON format:
-{"name":"full name","email":"email","phone":"phone number","designation":"job title","location":"city","yearsIT":0}
+{
+  "name": "full name",
+  "email": "email",
+  "phone": "phone number",
+  "designation": "job title",
+  "location": "city",
+  "yearsIT": 0,
+  "education": [{"degree": "...", "institution": "...", "fieldOfStudy": "...", "startDate": "...", "endDate": "...", "grade": "..."}],
+  "missingInfoGaps": ["list any missing project data, gap years, or missing info here"]
+}
 
 Rules:
-- name: full name of the person (first + last)
-- email: email address
-- phone: phone number
-- designation: current or most recent job title
-- location: city name only
-- yearsIT: total years of IT/work experience as a number (0 if not found)`;
+- name: full name
+- email: email
+- phone: phone
+- designation: job title
+- location: city
+- yearsIT: total years of IT experience (number)
+- education: list of degrees/certifications with details
+- missingInfoGaps: array of strings identifying missing data (e.g. "Missing project details for 2020-2022", "Resume gap detected between 2018 and 2019")`;
 
   try {
-    const raw = await ollamaGenerate(fullModelName, prompt, 200);
+    const raw = await ollamaGenerate(fullModelName, prompt, 800);
     const cleaned = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+    // Improved JSON extraction regex
     const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) return extractPersonalDetails(text);
+    if (!jsonMatch) throw new Error('No JSON block found in AI response');
+    
     const parsed = JSON.parse(jsonMatch[0]);
     return {
-      name:        typeof parsed.name        === 'string' ? parsed.name.trim()        : extractPersonalDetails(text).name,
-      email:       typeof parsed.email       === 'string' ? parsed.email.trim()       : extractPersonalDetails(text).email,
-      phone:       typeof parsed.phone       === 'string' ? parsed.phone.trim()       : extractPersonalDetails(text).phone,
-      designation: typeof parsed.designation === 'string' ? parsed.designation.trim() : extractPersonalDetails(text).designation,
-      location:    typeof parsed.location    === 'string' ? parsed.location.trim()    : extractPersonalDetails(text).location,
-      yearsIT:     typeof parsed.yearsIT     === 'number' ? parsed.yearsIT            : extractPersonalDetails(text).yearsIT,
+      name:        (parsed.name && typeof parsed.name === 'string' && parsed.name.length > 2) ? parsed.name.trim() : extractPersonalDetails(text).name,
+      email:       (parsed.email && typeof parsed.email === 'string') ? parsed.email.trim() : extractPersonalDetails(text).email,
+      phone:       (parsed.phone && typeof parsed.phone === 'string') ? parsed.phone.trim() : extractPersonalDetails(text).phone,
+      designation: (parsed.designation && typeof parsed.designation === 'string') ? parsed.designation.trim() : extractPersonalDetails(text).designation,
+      location:    (parsed.location && typeof parsed.location === 'string') ? parsed.location.trim() : extractPersonalDetails(text).location,
+      yearsIT:     typeof parsed.yearsIT === 'number' ? parsed.yearsIT : extractPersonalDetails(text).yearsIT,
+      education:   Array.isArray(parsed.education) ? parsed.education : [],
+      missingInfoGaps: Array.isArray(parsed.missingInfoGaps) ? parsed.missingInfoGaps : []
     };
-  } catch {
-    return extractPersonalDetails(text);
+  } catch (err) {
+    console.error('[Ollama] Extraction error:', err);
+    // Silent fallback to regex
+    return { ...extractPersonalDetails(text), education: [], missingInfoGaps: [] };
   }
 }
 
@@ -214,7 +242,7 @@ export function extractPersonalDetails(text: string): PersonalDetails {
   }
 
   const titlePatterns = [
-    /(?:Senior |Lead |Principal |Associate )?(QA|QE|SDET|Test|Quality|Automation|DevOps|Software|Full.?Stack|Data|AI|ML|Cloud)\s+(?:Engineer|Analyst|Architect|Developer|Lead|Manager|Consultant|Specialist)/i,
+    /(?:Senior |Lead |Principal |Associate )?(QA|QI|SDET|Test|Quality|Automation|DevOps|Software|Full.?Stack|Data|AI|ML|Cloud)\s+(?:Engineer|Analyst|Architect|Developer|Lead|Manager|Consultant|Specialist)/i,
     /(?:Software|Application|Systems?) (?:Engineer|Developer|Architect)/i,
     /(?:Project|Program|Delivery|Technical) (?:Manager|Lead|Director)/i,
     /Scrum Master|Product Owner|Business Analyst|System Analyst/i,
@@ -234,7 +262,7 @@ export function extractPersonalDetails(text: string): PersonalDetails {
     || text.match(/experience\s+of\s+(\d+(?:\.\d+)?)\s*\+?\s*(?:years?|yrs?)/i);
   const yearsIT = expMatch ? parseFloat(expMatch[1]) : 0;
 
-  return { name, email, phone, designation, location, yearsIT };
+  return { name, email, phone, designation, location, yearsIT, education: [], missingInfoGaps: [] };
 }
 
 
@@ -248,7 +276,7 @@ export interface DetectedSkill {
   reason: string;
 }
 
-/** Analyze resume text — detect BOTH profile details + QE skills using AI */
+/** Analyze resume text — detect BOTH profile details + QI skills using AI */
 export async function analyzeResumeWithOllama(
   resumeText: string,
   fullModelName: string
@@ -256,7 +284,7 @@ export async function analyzeResumeWithOllama(
   const skillList = SKILLS.map(s => `${s.id}:${s.name}`).join(', ');
   const resume = resumeText.slice(0, 3000);
 
-  const prompt = `List QE skills found in this resume. Use only these skill IDs: ${skillList}
+  const prompt = `List QI skills found in this resume. Use only these skill IDs: ${skillList}
 
 Resume:
 ${resume}
@@ -325,7 +353,7 @@ export async function generateSkillReport(
   const completion = Math.round((ratings.filter(r => r.selfRating > 0).length / SKILLS.length) * 100);
 
   // Simple, strict prompt that small LLMs can reliably follow
-  const prompt = `You are a QE career coach reviewing a skill self-assessment.
+  const prompt = `You are a QI career coach reviewing a skill self-assessment.
 
 Employee: ${employeeName}
 Completion: ${completion}% (${ratings.filter(r => r.selfRating > 0).length} of ${SKILLS.length} skills rated)
@@ -416,7 +444,7 @@ function generateFallbackReport(ratings: SkillRating[]) {
     }
   });
   if (strengths.length === 0) {
-    strengths.push('📋 Skill profile set up — ready for structured QE capability assessment');
+    strengths.push('📋 Skill profile set up — ready for structured QI capability assessment');
     strengths.push('🎯 All 7 skill categories available for a comprehensive evaluation');
   }
 
@@ -430,7 +458,7 @@ function generateFallbackReport(ratings: SkillRating[]) {
     gaps.push(`📈 ${beginner.length} Beginner-level skills need attention: ${beginner.slice(0, 3).map(s => s.name).join(', ')}`);
   }
   if (unrated.length > 0) {
-    gaps.push(`❓ ${unrated.length} skills not yet assessed — complete for a full QE profile`);
+    gaps.push(`❓ ${unrated.length} skills not yet assessed — complete for a full QI profile`);
   }
   const lowCovCats = catStats.filter(c => c.coverage < 50 && c.ratedCount > 0);
   lowCovCats.slice(0, 1).forEach(c => {
@@ -454,7 +482,7 @@ function generateFallbackReport(ratings: SkillRating[]) {
   const aiSkills = SKILLS.filter(s => s.category === 'AI');
   const ratedAI = aiSkills.filter(s => (ratings.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0);
   if (ratedAI.length < aiSkills.length) {
-    suggestions.push(`🤖 AI Testing is the fastest-growing QE domain. Rate/upskill: ${aiSkills.filter(s => !(ratings.find(r => r.skillId === s.id)?.selfRating)).slice(0, 2).map(s => s.name).join(', ')} for maximum career impact.`);
+    suggestions.push(`🤖 AI Testing is the fastest-growing QI domain. Rate/upskill: ${aiSkills.filter(s => !(ratings.find(r => r.skillId === s.id)?.selfRating)).slice(0, 2).map(s => s.name).join(', ')} for maximum career impact.`);
   }
   // Get validation
   if (expert.length > 0) {
@@ -463,7 +491,7 @@ function generateFallbackReport(ratings: SkillRating[]) {
   // DevOps push
   const devOpsSkills = catStats.find(c => c.cat === 'DevOps');
   if (devOpsSkills && devOpsSkills.avgLevel < 2) {
-    suggestions.push('☁️ DevOps skills (Docker, Kubernetes, CI/CD) are mandatory for senior QE roles — invest 4 hours/week to level up.');
+    suggestions.push('☁️ DevOps skills (Docker, Kubernetes, CI/CD) are mandatory for senior QI roles — invest 4 hours/week to level up.');
   }
   // 90-day goal
   const skillsToLevel = beginner.length;
@@ -474,9 +502,9 @@ function generateFallbackReport(ratings: SkillRating[]) {
   suggestions.push('🎓 Pursue ISTQB Advanced / Selenium Certification / AWS DevOps to add certified weight to your skill profile.');
 
   // --- summary --------------------------------------------------------------
-  const topStrengthName = expert[0]?.name ?? intermediate[0]?.name ?? topCats[0]?.cat ?? 'QE skills';
+  const topStrengthName = expert[0]?.name ?? intermediate[0]?.name ?? topCats[0]?.cat ?? 'QI skills';
   const dominantCat = topCats[0];
-  const summary = `You have completed ${completion}% of your QE skill matrix (${ratings.filter(r => r.selfRating > 0).length}/${SKILLS.length} skills rated).
+  const summary = `You have completed ${completion}% of your QI skill matrix (${ratings.filter(r => r.selfRating > 0).length}/${SKILLS.length} skills rated).
 ` +
   (expert.length > 0
     ? `Your standout strength is ${topStrengthName} at Expert level — positioning you as a subject matter expert. `
@@ -523,7 +551,7 @@ export async function ollamaChatWithContext(
   // context is now the full system instruction (already includes user's skill data)
   const prompt = context
     ? `${context}\n\nUser says: "${userMessage}"\n\nRespond naturally:`
-    : `You are a helpful QE career coach. User says: "${userMessage}"\n\nRespond in 2-3 sentences:`;
+    : `You are a helpful QI career coach. User says: "${userMessage}"\n\nRespond in 2-3 sentences:`;
 
   const raw = await ollamaGenerate(fullModelName, prompt, 250);
   return raw.trim() || "I'll need a moment to think about that. Try rephrasing your question!";

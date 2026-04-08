@@ -10,6 +10,7 @@ import { useAuth } from '@/lib/authContext';
 import { useDark, mkTheme } from '@/lib/themeContext';
 import { apiSaveSkills, apiSubmit, isServerAvailable } from '@/lib/api';
 import { useApp } from '@/lib/AppContext';
+import ZensarLoader from '@/components/ZensarLoader';
 
 // All 32 skill names in canonical order (matches server)
 const SKILL_NAMES = [
@@ -35,12 +36,23 @@ const CAT_EMOJI: Record<SkillCategory, string> = {
 };
 const LVL_LABEL: Record<ProficiencyLevel, string> = { 0: 'N/A', 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };
 
-export default function SkillMatrixPage() {
+export default function SkillMatrixPage({ 
+  isPopup: propIsPopup, 
+  onTabChange: propOnTabChange 
+}: { 
+  isPopup?: boolean; 
+  onTabChange?: (path: string) => void; 
+}) {
   const navigate = useNavigate();
   const location = useLocation();
   const { employeeId } = useAuth();
   const { dark } = useDark();
-  const { data, reload, isPopup } = useApp();
+  const { data, reload, isPopup: ctxIsPopup, onTabChange: ctxOnTabChange } = useApp();
+  
+  // Use props if provided, otherwise fall back to context
+  const isPopup = propIsPopup !== undefined ? propIsPopup : ctxIsPopup;
+  const onTabChange = propOnTabChange || ctxOnTabChange;
+  
   const T = mkTheme(dark);
   
   const activeEmpId = isPopup ? (data?.user?.id || data?.user?.ZensarID || employeeId) : employeeId;
@@ -65,6 +77,8 @@ export default function SkillMatrixPage() {
   });
   const [activeIdx, setActiveIdx] = useState(0);
   const [showIncomplete, setShowIncomplete] = useState(false);
+  const [sessionRatedIds, setSessionRatedIds] = useState<string[]>([]);
+  const [saving, setSaving] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [showAIBanner, setShowAIBanner] = useState(fromResume);
   
@@ -145,10 +159,20 @@ export default function SkillMatrixPage() {
     SKILLS.filter(s => s.category === cat && (ratings.find(r => r.skillId === s.id)?.selfRating ?? 0) > 0).length;
   const catTotal = (cat: SkillCategory) => SKILLS.filter(s => s.category === cat).length;
 
-  const displaySkills = showIncomplete ? incomplete : SKILLS.filter(s => s.category === activeCategory);
+  const displaySkills = useMemo(() => {
+    if (showIncomplete) {
+      const incompleteIds = incomplete.map(s => s.id);
+      return SKILLS.filter(s => incompleteIds.includes(s.id) || sessionRatedIds.includes(s.id));
+    }
+    return SKILLS.filter(s => s.category === activeCategory);
+  }, [showIncomplete, incomplete, sessionRatedIds, activeCategory]);
 
-  const updateRating = (skillId: string, level: ProficiencyLevel) =>
+  const updateRating = (skillId: string, level: ProficiencyLevel) => {
     setRatings(prev => prev.map(r => r.skillId === skillId ? { ...r, selfRating: level } : r));
+    if (showIncomplete && !sessionRatedIds.includes(skillId)) {
+      setSessionRatedIds(prev => [...prev, skillId]);
+    }
+  };
 
   const buildSkillsPayload = (): Record<string, number> => {
     const flat: Record<string, number> = {};
@@ -161,6 +185,7 @@ export default function SkillMatrixPage() {
 
   const handleSave = async () => {
     if (!activeEmpId || activeEmpId === 'new') { toast.success('✅ Progress saved!'); return; }
+    setSaving(true);
     const empName = getEmployee(activeEmpId)?.name || data?.user?.Name || '';
     saveSkillRatings(activeEmpId, empName, ratings);
     try {
@@ -174,6 +199,8 @@ export default function SkillMatrixPage() {
       if (reload) await reload();
     } catch (err) {
       toast.warning('Draft saved locally (Cloud sync failed).');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -196,8 +223,12 @@ export default function SkillMatrixPage() {
       toast.warning('✅ Saved locally! (Backend error)');
     }
     setTimeout(() => {
-      navigate('/employee/dashboard');
-      if (!isPopup) window.location.reload();
+      if (isPopup && onTabChange) {
+        onTabChange('/employee/dashboard');
+      } else {
+        navigate('/employee/dashboard');
+        window.location.reload();
+      }
     }, 900);
   };
 
@@ -222,11 +253,13 @@ export default function SkillMatrixPage() {
           </div>
           {!alreadySubmitted && (
             <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <button onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 20px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: '#60A5FA', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
-                <Save size={15} /> Save Progress
+              <button disabled={saving} onClick={handleSave} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 20px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: '#60A5FA', fontWeight: 600, fontSize: '13px', cursor: saving ? 'not-allowed' : 'pointer' }}>
+                {saving ? <ZensarLoader size={16} dark={dark} /> : <Save size={15} />} 
+                {saving ? 'Syncing...' : 'Save Progress'}
               </button>
               <button onClick={handleSubmit} disabled={submitting} style={{ display: 'inline-flex', alignItems: 'center', gap: '7px', padding: '10px 22px', borderRadius: '9px', background: 'linear-gradient(135deg, #3B82F6, #8B5CF6)', border: 'none', color: '#fff', fontWeight: 700, fontSize: '13px', cursor: submitting ? 'not-allowed' : 'pointer', boxShadow: '0 0 20px rgba(59,130,246,0.35)', opacity: submitting ? 0.7 : 1 }}>
-                <Send size={15} /> {submitting ? 'Submitting...' : 'Submit Final'}
+                {submitting ? <ZensarLoader size={16} dark={dark} /> : <Send size={15} />}
+                {submitting ? 'Submitting...' : 'Submit Final'}
               </button>
             </div>
           )}
@@ -256,8 +289,8 @@ export default function SkillMatrixPage() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
               <span style={{ fontSize: '38px', fontWeight: 800, fontFamily: "'Space Grotesk',sans-serif", backgroundImage: completion >= 75 ? 'linear-gradient(135deg,#10B981,#3B82F6)' : completion >= 50 ? 'linear-gradient(135deg,#3B82F6,#8B5CF6)' : 'linear-gradient(135deg,#F59E0B,#EF4444)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>{completion}%</span>
               {incomplete.length > 0
-                ? <button onClick={() => setShowIncomplete(v => !v)} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 14px', borderRadius: '8px', background: showIncomplete ? 'rgba(239,68,68,0.2)' : 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.35)', color: '#FCA5A5', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
-                    <AlertCircle size={13} /> {showIncomplete ? 'Back to All' : `${incomplete.length} Not Rated`}
+                ? <button onClick={() => { setShowIncomplete(v => !v); setSessionRatedIds([]); }} style={{ display: 'inline-flex', alignItems: 'center', gap: '5px', padding: '7px 14px', borderRadius: '8px', background: showIncomplete ? 'rgba(59,130,246,0.2)' : 'rgba(239,68,68,0.08)', border: `1px solid ${showIncomplete ? '#3B82F680' : 'rgba(239,68,68,0.35)'}`, color: showIncomplete ? '#60A5FA' : '#FCA5A5', fontSize: '12px', fontWeight: 600, cursor: 'pointer' }}>
+                    <AlertCircle size={13} /> {showIncomplete ? 'Back to Categories' : `${incomplete.length} Not Rated`}
                   </button>
                 : <div style={{ display: 'flex', alignItems: 'center', gap: '5px', color: '#34D399', fontSize: '13px', fontWeight: 600 }}><CheckCircle2 size={16} /> All Done!</div>
               }
@@ -330,11 +363,20 @@ export default function SkillMatrixPage() {
 
         {/* Footer Actions */}
         <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '28px' }}>
-          <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} disabled={activeIdx === 0} style={{ padding: '11px 22px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: T.text, cursor: activeIdx === 0 ? 'not-allowed' : 'pointer' }}>Previous</button>
-          {activeIdx < CATEGORIES.length - 1 ? (
-            <button onClick={() => setActiveIdx(i => Math.min(CATEGORIES.length - 1, i + 1))} style={{ padding: '11px 22px', borderRadius: '9px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>Next Category</button>
+          {!showIncomplete ? (
+            <>
+              <button onClick={() => setActiveIdx(i => Math.max(0, i - 1))} disabled={activeIdx === 0} style={{ padding: '11px 22px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: T.text, cursor: activeIdx === 0 ? 'not-allowed' : 'pointer', fontWeight: 600 }}>Previous</button>
+              {activeIdx < CATEGORIES.length - 1 ? (
+                <button onClick={() => setActiveIdx(i => Math.min(CATEGORIES.length - 1, i + 1))} style={{ padding: '11px 22px', borderRadius: '9px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', border: 'none', color: '#fff', cursor: 'pointer', fontWeight: 700 }}>Next Category</button>
+              ) : (
+                <button onClick={handleSubmit} disabled={submitting} style={{ padding: '12px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#10B981,#3B82F6)', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>{submitting ? 'Submitting...' : 'Submit Final'}</button>
+              )}
+            </>
           ) : (
-            <button onClick={handleSubmit} disabled={submitting} style={{ padding: '12px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#10B981,#3B82F6)', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>{submitting ? 'Submitting...' : 'Submit Final'}</button>
+            <>
+              <button onClick={() => { setShowIncomplete(false); setSessionRatedIds([]); }} style={{ padding: '11px 22px', borderRadius: '9px', background: T.card, border: `1px solid ${T.bdr}`, color: T.text, cursor: 'pointer', fontWeight: 600 }}>Back to Categories</button>
+              <button onClick={handleSubmit} disabled={submitting} style={{ padding: '12px 28px', borderRadius: '10px', background: 'linear-gradient(135deg,#10B981,#3B82F6)', border: 'none', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>{submitting ? 'Submitting...' : 'Submit Final'}</button>
+            </>
           )}
         </div>
         

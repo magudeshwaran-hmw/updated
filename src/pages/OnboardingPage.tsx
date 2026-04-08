@@ -38,7 +38,7 @@ export default function OnboardingPage() {
 
   const [details, setDetails] = useState<DetailsState>({
     name: '', email: '', phone: '', designation: '', location: '',
-    yearsIT: 0, yearsZensar: 0, department: 'Quality Engineering',
+    yearsIT: 0, yearsZensar: 0, department: 'Quality Intelligence',
     password: '', confirmPassword: '',
   });
   const [resumeText, setResumeText] = useState('');
@@ -203,7 +203,7 @@ export default function OnboardingPage() {
             Start Your Skill Assessment
           </h1>
           <p style={{ color: T.sub, fontSize: '14px' }}>
-            Upload your resume to auto-fill your details and detect your QE skills instantly.
+            Upload your resume to auto-fill your details and detect your QI skills instantly.
           </p>
         </div>
 
@@ -261,7 +261,7 @@ export default function OnboardingPage() {
               <Field fkey="phone"       label="Phone Number"    Icon={Phone}    type="tel"   placeholder="+91 98765 43210" />
               <Field fkey="designation" label="Designation *"   Icon={Briefcase} placeholder="QA Engineer" />
               <Field fkey="location"    label="Location"        Icon={MapPin}   placeholder="Pune, Maharashtra" />
-              <Field fkey="department"  label="Department"      Icon={Briefcase} placeholder="Quality Engineering" />
+              <Field fkey="department"  label="Department"      Icon={Briefcase} placeholder="Quality Intelligence" />
               <div>
                 <label style={LBL}>Years in IT</label>
                 <div style={{ position: 'relative' }}>

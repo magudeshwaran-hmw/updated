@@ -1,6 +1,6 @@
 import { useAuth } from '@/lib/authContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { LogOut, Menu, X, Sun, Moon, LayoutDashboard, Settings, User } from 'lucide-react';
+import { LogOut, Menu, X, Sun, Moon, LayoutDashboard, User } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { checkLLMStatus } from '@/lib/llm';
 import { ZensarLogo } from '@/components/ZensarLogo';
@@ -32,12 +32,12 @@ export default function AppHeader() {
     { label: 'My Skills',       path: '/employee/skills' },
     { label: 'Certifications',  path: '/employee/certifications' },
     { label: 'Projects',        path: '/employee/projects' },
-    { label: 'AI Intelligence', path: '/employee/ai' },
+    { label: 'Education',       path: '/employee/education' },
+    { label: 'AI Coach',        path: '/employee/ai' },
   ];
 
   const adminNavItems = [
-    { label: 'Admin Terminal',  path: '/admin', icon: LayoutDashboard },
-    { label: 'Integration Settings',  path: '/setup', icon: Settings },
+    { label: 'Dashboard', path: '/admin', icon: LayoutDashboard },
   ];
 
   const navItems = role === 'admin' ? adminNavItems : empNavItems;
@@ -106,26 +106,28 @@ export default function AppHeader() {
             {dark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
 
-          {/* AI Status */}
-          {llmStatus?.online && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 12, background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.2)' }} title="Local AI Online">
-               <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#22c55e', boxShadow: '0 0 8px #22c55e' }} />
-               <span style={{ fontSize: 11, fontWeight: 700, color: '#22c55e' }} className="sk-hide-mobile">LOCAL AI</span>
-            </div>
-          )}
-
           {isLoggedIn && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, paddingLeft: 12, borderLeft: `1px solid ${T.bdr}` }}>
-               <div style={{ textAlign: 'right' }} className="sk-hide-mobile">
-                  <div style={{ fontSize: 13, fontWeight: 700, color: T.text }}>{displayName}</div>
-                  <div style={{ fontSize: 10, fontWeight: 600, color: '#3B82F6', textTransform: 'uppercase' }}>{role} Mode</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ 
+                    width: 10, height: 10, borderRadius: '50%', 
+                    background: llmStatus?.online ? '#10B981' : '#EF4444', 
+                    boxShadow: llmStatus?.online ? '0 0 10px #10B981' : '0 0 10px #EF4444',
+                    transition: '0.3s'
+                  }} />
+                  <div style={{ fontSize: 14, fontWeight: 800, color: T.text, letterSpacing: -0.3 }}>{displayName}</div>
                </div>
                <button 
                  onClick={() => { logout(); navigate('/'); }}
-                 style={{ width: 40, height: 40, borderRadius: 12, background: 'rgba(239,68,68,0.1)', border: 'none', color: '#EF4444', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+                 style={{ 
+                   display: 'flex', alignItems: 'center', gap: 8, padding: '8px 16px', borderRadius: 12, 
+                   background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.1)', 
+                   color: '#EF4444', fontWeight: 800, fontSize: 13, cursor: 'pointer', transition: '0.2s'
+                 }}
                  title="Logout"
                >
-                 <LogOut size={18} />
+                 <LogOut size={16} />
+                 <span>Exit</span>
                </button>
             </div>
           )}

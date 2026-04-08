@@ -175,99 +175,107 @@ export interface SessionUser { employeeId: string; role: 'employee' | 'admin'; n
 
 export function saveSession(user: SessionUser) {
   localStorage.setItem('skill_nav_session_id', user.employeeId);
+  localStorage.setItem('skill_nav_session_role', user.role);
+  localStorage.setItem('skill_nav_session_name', user.name);
   window.dispatchEvent(new Event('skill_nav_session_changed'));
 }
 export function loadSession(): SessionUser | null {
   const id = localStorage.getItem('skill_nav_session_id');
+  const role = localStorage.getItem('skill_nav_session_role');
+  const name = localStorage.getItem('skill_nav_session_name');
   if (!id) return null;
-  // Temporary synchronous fallback structure for standard app routing!
-  return { employeeId: id, role: 'employee', name: 'User' };
+  return { employeeId: id, role: (role as any) || 'employee', name: name || 'User' };
 }
 export function clearSession() { 
   localStorage.removeItem('skill_nav_session_id'); 
+  localStorage.removeItem('skill_nav_session_role'); 
+  localStorage.removeItem('skill_nav_session_name'); 
   window.dispatchEvent(new Event('skill_nav_session_changed'));
 }
 
 // ─── Excel Export ─────────────────────────────────────────────────────────────
 const LEVEL_LABEL: Record<number, string> = { 0: 'Not Rated', 1: 'Beginner', 2: 'Intermediate', 3: 'Expert' };
 
-/** Export all employee skill data as a multi-sheet Excel file and trigger download */
-export function exportAllToExcel(): void {
-  const employees = readEmployees();
+/** Export provided employee skill data as a multi-sheet Excel file and trigger download */
+export function exportAllToExcel(customEmployees?: any[]): void {
+  const employees = customEmployees || [];
   const wb = XLSX.utils.book_new();
 
   // ── Sheet 1: Summary ────────────────────────────────────────────────────────
   const summaryRows = employees.map(e => ({
-    'Employee ID':        e.id,
-    'Name':               e.name,
-    'Email':              e.email,
-    'Designation':        e.designation,
-    'Department':         e.department,
-    'Years in IT':        e.yearsIT,
-    'Years at Zensar':    e.yearsZensar,
-    'Primary Skill':      e.primarySkill,
-    'Primary Domain':     e.primaryDomain,
-    'Completion %':       computeCompletion(e.skills),
-    'Submitted':          e.submitted ? 'Yes' : 'No',
-    'Resume Uploaded':    e.resumeUploaded ? 'Yes' : 'No',
+    'Employee ID':        e.zensar_id || e.id,
+    'Name':               e.name || e.Name,
+    'Email':              e.email || e.Email,
+    'Designation':        e.designation || e.Designation,
+    'Department':         e.department || e.Department || 'Quality Intelligence',
+    'Completion %':       e.completion || 0,
+    'Submitted':          (e.submitted === true || e.Submitted === 'Yes') ? 'Yes' : 'No',
+    'Date Exported':      new Date().toLocaleString()
   }));
   const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
   XLSX.utils.book_append_sheet(wb, wsSummary, 'Summary');
 
-  // ── Sheet 2: Skill Ratings (wide format) ────────────────────────────────────
+  // ── Sheet 2: Skill Ratings ──────────────────────────────────────────────────
   const skillRows = employees.map(e => {
-    const row: Record<string, string | number> = { Name: e.name, Designation: e.designation };
+    const row: Record<string, string | number> = { Name: e.name || e.Name, ID: e.zensar_id || e.id };
     SKILLS.forEach(s => {
-      const r = e.skills.find(r => r.skillId === s.id);
-      row[`${s.name} (Self)`]    = LEVEL_LABEL[r?.selfRating ?? 0];
-      row[`${s.name} (Manager)`] = r?.managerRating != null ? LEVEL_LABEL[r.managerRating] : '-';
-      row[`${s.name} (Validated)`] = r?.validated ? 'Yes' : 'No';
+      const r = (e.skills || []).find((rt: any) => rt.skillId === s.id);
+      row[s.name] = LEVEL_LABEL[r?.selfRating ?? 0];
     });
     return row;
   });
-  const wsSkills = XLSX.utils.json_to_sheet(skillRows);
-  XLSX.utils.book_append_sheet(wb, wsSkills, 'Skill Ratings');
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(skillRows), 'Skills');
 
-  // ── Sheet 3: By Category ────────────────────────────────────────────────────
-  const cats = [...new Set(SKILLS.map(s => s.category))];
-  cats.forEach(cat => {
-    const catSkills = SKILLS.filter(s => s.category === cat);
-    const rows = employees.map(e => {
-      const row: Record<string, string | number> = { Name: e.name };
-      catSkills.forEach(s => {
-        const r = e.skills.find(r => r.skillId === s.id);
-        row[s.name] = LEVEL_LABEL[r?.selfRating ?? 0];
+  // ── Sheet 3: Certifications ──────────────────────────────────────────────────
+  const certRows: any[] = [];
+  employees.forEach(e => {
+    (e.certifications || []).forEach((c: any) => {
+      certRows.push({
+        'Employee': e.name || e.Name,
+        'ID': e.zensar_id || e.id,
+        'Cert Name': c.CertName || c.cert_name,
+        'Provider': c.Provider || c.provider,
+        'Status': c.status || 'Active'
       });
-      return row;
     });
-    const ws = XLSX.utils.json_to_sheet(rows);
-    XLSX.utils.book_append_sheet(wb, ws, cat);
   });
+  if (certRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(certRows), 'Certifications');
 
-  // ── Sheet 4: Growth Plans ────────────────────────────────────────────────────
-  const plans = readGrowthPlans();
-  const planRows = plans.map(p => {
-    const emp = employees.find(e => e.id === p.employeeId);
-    const skill = SKILLS.find(s => s.id === p.skillId);
-    return {
-      'Employee':        emp?.name || p.employeeId,
-      'Skill':           skill?.name || p.skillId,
-      'Current Level':   LEVEL_LABEL[p.currentLevel],
-      'Target Level':    LEVEL_LABEL[p.targetLevel],
-      'Target Date':     p.targetDate,
-      'Progress %':      p.progress,
-      'Status':          p.status,
-      'Actions':         p.actions.join(' | '),
-    };
+  // ── Sheet 4: Projects ────────────────────────────────────────────────────────
+  const projRows: any[] = [];
+  employees.forEach(e => {
+    (e.projects || []).forEach((p: any) => {
+      projRows.push({
+        'Employee': e.name || e.Name,
+        'ID': e.zensar_id || e.id,
+        'Project': p.ProjectName || p.project_name,
+        'Role': p.Role || p.role,
+        'Domain': p.Domain || p.domain,
+        'Technologies': Array.isArray(p.Technologies) ? p.Technologies.join(', ') : p.Technologies
+      });
+    });
   });
-  if (planRows.length > 0) {
-    const wsPlans = XLSX.utils.json_to_sheet(planRows);
-    XLSX.utils.book_append_sheet(wb, wsPlans, 'Growth Plans');
-  }
+  if (projRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(projRows), 'Projects');
+
+  // ── Sheet 5: Education ────────────────────────────────────────────────────────
+  const eduRows: any[] = [];
+  employees.forEach(e => {
+    (e.education || []).forEach((ed: any) => {
+      eduRows.push({
+        'Employee': e.name || e.Name,
+        'ID': e.zensar_id || e.id,
+        'Degree': ed.Degree || ed.degree,
+        'Institution': ed.Institution || ed.institution,
+        'Field': ed.FieldOfStudy || ed.field_of_study,
+        'Year': ed.EndDate || ed.end_date
+      });
+    });
+  });
+  if (eduRows.length > 0) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(eduRows), 'Education');
 
   // ── Trigger download ─────────────────────────────────────────────────────────
   const date = new Date().toISOString().split('T')[0];
-  XLSX.writeFile(wb, `SkillMatrix_Export_${date}.xlsx`);
+  XLSX.writeFile(wb, `QI_SkillMatrix_Export_${date}.xlsx`);
 }
 
 /** Export a single employee's data to Excel */

@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { ArrowRight, Upload, BarChart3, TrendingUp, Shield, Target, Brain,
-  CheckCircle, Award, BookOpen, ClipboardList, Users, Map as MapIcon, Info } from 'lucide-react';
+  CheckCircle, Award, BookOpen, ClipboardList, Users, Map as MapIcon, Info, FileText } from 'lucide-react';
 import { useDark, mkTheme } from '@/lib/themeContext';
 
 const IMG = {
@@ -51,13 +51,13 @@ export default function LandingPage() {
             </div>
 
             <h1 style={{ fontSize:'clamp(36px,5vw,64px)', fontWeight:800, lineHeight:1.1, color:WT, marginBottom:22, fontFamily:"'Space Grotesk',sans-serif", letterSpacing:'-0.02em' }}>
-              Know Your Skills.<br />
+              Ready to transform<br />
               <span style={{ background:'linear-gradient(135deg,#3B82F6,#9333EA,#DB2777)', WebkitBackgroundClip:'text', WebkitTextFillColor:'transparent', fontWeight:800 }}>
-                Grow Your Career.
+                your career?
               </span>
             </h1>
             <p style={{ fontSize:16, color: dark ? WS : '#000000', fontWeight: 500, lineHeight:1.6, maxWidth:520, marginBottom:44, opacity:0.9 }}>
-              Start with your resume. Let AI uncover your skills and certifications. Self-Assess and map your proficiency across different skills. Know your gaps. Plan your growth.
+              Join the Zensar Quality Intelligence ecosystem and unlock your full potential with AI-driven insights.
             </p>
 
             <div style={{ display:'flex', flexWrap:'wrap', gap:16 }}>
@@ -179,19 +179,20 @@ export default function LandingPage() {
           </div>
       </div>
 
-      <div id="key-benefits" style={{ scrollMarginTop:100, background: dark ? '#0A1628' : '#fff', padding:'90px 28px' }}>
+    <div id="key-benefits" style={{ scrollMarginTop:100, background: dark ? '#0A1628' : '#fff', padding:'90px 28px' }}>
         <div style={{ maxWidth:1100, margin:'0 auto' }}>
           <div style={{ textAlign:'center', marginBottom:54 }}>
+            <div style={{ color:'#3B82F6', fontWeight:700, fontSize:11, letterSpacing:'0.2em', marginBottom:12, textTransform:'uppercase' }}>Platform Powerhouses</div>
             <h2 style={{ fontSize:'clamp(28px,4vw,50px)', fontWeight:800, color:WT, fontFamily:"'Space Grotesk',sans-serif" }}>What Every Employee Gains</h2>
           </div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(320px, 1fr))', gap:24 }}>
             {[
-              { icon:ClipboardList, c:'#3B82F6', t:'Know Where You Stand',          d:'Get a clear picture of your QE skills across all domains — structured and accurate.' },
-              { icon:Target,        c:'#8B5CF6', t:'Close Skill Gaps Faster',        d:'Instantly see missing skills and receive prioritised recommendations to close them.' },
-              { icon:Award,         c:'#10B981', t:'Manager-Endorsed Credentials',   d:'Ratings validated by your manager — giving you officially verified proof of expertise.' },
-              { icon:TrendingUp,    c:'#F59E0B', t:'Unlock Better Opportunities',    d:'A complete skill profile helps you get matched to the right projects and career roles.' },
-              { icon:BookOpen,      c:'#EC4899', t:'Personalised Learning Roadmap',  d:'Get a growth plan with specific actions tailored to your career goals.' },
-              { icon:Users,         c:'#06B6D4', t:'Contribute to Team Visibility',  d:'Help leadership plan smarter with accurate QE capability data across the team.' },
+              { icon:ClipboardList, c:'#3B82F6', t:'Expert Skill Matrix',          d:'Map your proficiency across 32+ domains with a structured, manager-validated matrix that tracks your evolution.' },
+              { icon:FileText,      c:'#8B5CF6', t:'98+ ATS Resume Builder',       d:'Instantly generate professional, AI-architected resumes optimized for a 98/100 ATS score and quantifiable impact.' },
+              { icon:Award,         c:'#10B981', t:'Certificate Credits',          d:'Consolidate your global certifications into a single verified dashboard with official Zensar credit tracking.' },
+              { icon:Brain,         c:'#F59E0B', t:'Growth Intelligence',         d:'Unlock AI-driven career gap analysis and receive personalized recommendations for your next technical milestone.' },
+              { icon:TrendingUp,    c:'#EC4899', t:'Elite Opportunities',          d:'Get priority matching for premium projects and high-impact roles based on your verified skill profile.' },
+              { icon:Users,         c:'#06B6D4', t:'Leadership Visibility',        d:'Showcase your expertise to top leadership with accurate QE capability data that highlights your unique value.' },
             ].map(b => (
               <div key={b.t} style={{ borderRadius:24, padding:32, background: dark ? 'rgba(255,255,255,0.03)' : '#f8fafc', border:`1px solid ${dark ? 'rgba(255,255,255,0.06)' : 'rgba(59,130,246,0.1)'}`, transition:'all 0.3s' }}>
                 <div style={{ width:48, height:48, borderRadius:16, background:`${b.c}15`, display:'flex', alignItems:'center', justifyContent:'center', marginBottom:24 }}>

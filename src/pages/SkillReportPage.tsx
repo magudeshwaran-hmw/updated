@@ -94,15 +94,15 @@ function HeroStats({ data }: { data: any }) {
   const gaps = useCountUp(data.gapCount);
 
   const qeLevel =
-    data.completion >= 80 ? 'Senior QE' :
-    data.completion >= 50 ? 'Mid QE' :
-    data.completion >= 25 ? 'Junior QE' : 'Associate';
+    data.completion >= 80 ? 'Senior QI' :
+    data.completion >= 50 ? 'Mid QI' :
+    data.completion >= 25 ? 'Junior QI' : 'Associate';
 
   const cards = [
     { label: 'Completion',    value: cmp,       suffix:'%', color:'#00A3E0' },
     { label: 'Expert Skills', value: exp,       suffix:'',  color:'#22c55e' },
     { label: 'Skill Gaps',    value: gaps,      suffix:'',  color:'#f59e0b' },
-    { label: 'QE Readiness',  value: qeLevel,   suffix:'',  color:'#c084fc', isStr: true },
+    { label: 'QI Readiness',  value: qeLevel,   suffix:'',  color:'#c084fc', isStr: true },
   ];
   return (
     <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(180px,1fr))', gap:16, marginBottom:24 }}>
@@ -310,7 +310,7 @@ function AISection({ data }: { data: any }) {
 
   useEffect(() => {
     const load = async () => {
-      const prompt = `You are a career coach for Zensar QE engineers.
+      const prompt = `You are a career coach for Zensar QI engineers.
 Name: ${data.user?.Name}
 Expert Skills (${data.expertCount}): ${data.expertSkills.join(', ')}
 Gap Skills: ${data.gapSkills.map((g:any)=>g.skill).join(', ')}
@@ -332,9 +332,9 @@ Return ONLY valid JSON with exactly these keys:
       } catch {}
       // Fallback if LLM offline
       setInsights({
-        positioning: `With ${data.expertCount} Expert-level skills and ${data.completion}% matrix completion, ${data.user?.Name} occupies a ${data.completion >= 70 ? 'strong senior' : 'growing mid-level'} position in the Zensar QE talent pool. Key differentiators include expertise in ${data.expertSkills.slice(0,3).join(', ')}.`,
+        positioning: `With ${data.expertCount} Expert-level skills and ${data.completion}% matrix completion, ${data.user?.Name} occupies a ${data.completion >= 70 ? 'strong senior' : 'growing mid-level'} position in the Zensar QI talent pool. Key differentiators include expertise in ${data.expertSkills.slice(0,3).join(', ')}.`,
         edge: `Your Expert mastery of ${data.expertSkills.slice(0,4).join(', ')} provides a tangible advantage in ${data.expertSkills.includes('AI Test Automation') ? 'next-gen AI-driven QA pipelines' : 'enterprise test automation initiatives'}. This profile matches Zensar's growing demand for ${data.categoryAverages['AI'] >= 2 ? 'AI-augmented testing talent' : 'automation-first testing engineers'}.`,
-        milestone: `Advancing ${data.gapSkills.slice(0,2).map((g:any)=>g.skill).join(' and ')} to Expert level will unlock Senior QE Engineer readiness. Consider ISTQB Advanced or ${data.expertSkills.includes('Docker') ? 'AWS DevOps' : 'Azure DevOps'} certification as the next growth vector.`,
+        milestone: `Advancing ${data.gapSkills.slice(0,2).map((g:any)=>g.skill).join(' and ')} to Expert level will unlock Senior QI Engineer readiness. Consider ISTQB Advanced or ${data.expertSkills.includes('Docker') ? 'AWS DevOps' : 'Azure DevOps'} certification as the next growth vector.`,
       });
       setLoading(false);
     };
@@ -504,7 +504,7 @@ export default function SkillReportPage() {
         <div style={{ marginBottom:28 }}>
           <h1 style={{ fontFamily:'Inter,sans-serif', fontWeight:800, fontSize:'clamp(20px,3vw,30px)', margin:0 }}>Skills Report</h1>
           <p style={{ color:'rgba(255,255,255,0.5)', fontSize:14, margin:'4px 0 0' }}>
-            Your complete QE skill profile · Zensar Technologies
+            Your complete QI skill profile · Zensar Technologies
           </p>
         </div>
 

@@ -24,10 +24,11 @@ if %errorlevel% neq 0 (
     echo [WARNING] Ollama is not installed. AI features will be offline.
     echo Download it at: https://ollama.com/download
 ) else (
-    echo Found Ollama! Pulling Llama3 model (this may take a moment on first run)...
+    echo Found Ollama! Pulling Zensar IQ signature (this may take a moment on first run)...
+    SET OLLAMA_ORIGINS=*
     start /b ollama serve
-    timeout /t 5 >nul
-    call ollama pull llama3
+    timeout /t 8 >nul
+    call ollama pull minimax-m2.5:cloud
 )
 
 echo.

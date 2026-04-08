@@ -103,7 +103,7 @@ export default function AuthPage() {
   const [sMobile,      setSMobile]      = useState('');
   const [sEmail,       setSEmail]       = useState('');
   const [sLocation,    setSLocation]    = useState('Pune, Maharashtra');
-  const [sDept,        setSDept]        = useState('Quality Engineering');
+  const [sDept,        setSDept]        = useState('Quality Intelligence');
   const [sYearsIT,     setSYearsIT]     = useState('');
   const [sYearsZensar, setSYearsZensar] = useState('');
   const [sPassword,    setSPassword]    = useState('');
@@ -139,7 +139,7 @@ export default function AuthPage() {
         email:             emp.email || '',
         phone:             emp.phone || '',
         designation:       emp.designation || existingLocal?.designation || '',
-        department:        emp.department || 'Quality Engineering',
+        department:        emp.department || 'Quality Intelligence',
         location:          emp.location   || '',
         yearsIT:           Number(emp.yearsIT ?? 0),
         yearsZensar:       Number(emp.yearsZensar ?? 0),
@@ -233,7 +233,7 @@ export default function AuthPage() {
     </button>
   );
 
-  const DEPTS = ['Quality Engineering', 'Development', 'DevOps', 'Data & AI', 'Cloud', 'Delivery', 'Management'];
+  const DEPTS = ['Quality Intelligence', 'Development', 'DevOps', 'Data & AI', 'Cloud', 'Delivery', 'Management'];
   const LOCS  = ['Pune, Maharashtra', 'Bangalore, Karnataka', 'Hyderabad, Telangana', 'Chennai, Tamil Nadu', 'Mumbai, Maharashtra', 'Noida, UP'];
 
   return (
@@ -265,7 +265,7 @@ export default function AuthPage() {
               <div style={{ width: 40, height: 40, borderRadius: '10px', background: 'linear-gradient(135deg,#3B82F6,#8B5CF6)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px' }}>⚡</div>
               <span style={{ fontSize: '18px', fontWeight: 800, color: '#fff', fontFamily: "'Space Grotesk',sans-serif", letterSpacing: '0.02em' }}>Skill Navigator</span>
             </div>
-            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)' }}>Zensar Quality Engineering</div>
+            <div style={{ fontSize: '13px', color: 'rgba(255,255,255,0.50)' }}>Zensar Quality Intelligence</div>
           </div>
 
           {/* Tab switcher */}

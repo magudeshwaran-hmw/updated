@@ -22,11 +22,13 @@ import { API_BASE } from '@/lib/api';
 // TO SWITCH: change AI_MODE to 'cloud' and add CLOUD_API_KEY
 // ─────────────────────────────────────────────────────────────
 
+const LOCAL_MODEL = 'minimax-m2.5:cloud';
 const AI_MODE: 'local' | 'cloud' = 'local';
+const CACHE_TTL = 3600 * 12; 
 
 // Try both URLs — avoids "AI offline" on machines where 127.0.0.1 works but localhost doesn't
 const LOCAL_URLS = [
-  `${API_BASE}/llm', // Proxy via our backend to completely bypass Browser CORS
+  `${API_BASE}/llm`, // Proxy via our backend to completely bypass Browser CORS
   'http://localhost:11434/api/generate',
   'http://127.0.0.1:11434/api/generate',
 ];
@@ -34,10 +36,8 @@ const LOCAL_STATUS_URLS = [
   'http://localhost:11434/api/tags',
   'http://127.0.0.1:11434/api/tags',
 ];
-const LOCAL_MODEL = 'minimax-m2.5:cloud'; // Cloud-routed via Ollama — no RAM needed, fast!
-
 const CLOUD_API_KEY = 'PASTE_API_KEY_HERE'; // replace when approved
-const CLOUD_MODEL = 'claude-sonnet-4-20250514';
+const CLOUD_MODEL = 'claude-3-5-sonnet-20241022';
 
 // ─── TIMEOUT HELPER ──────────────────────────────────────────
 const withTimeout = (promise: Promise<any>, ms: number) => {
@@ -61,7 +61,6 @@ export const callLLM = async (
   _cacheKeyArg?: string   // kept for backwards-compat; ignored — key is auto-derived
 ): Promise<LLMResult> => {
 
-  // Check cache first using a more robust key (simple hash of entire prompt)
   const getPromptHash = (str: string) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -77,7 +76,6 @@ export const callLLM = async (
   if (cached) {
     try {
       const parsed = JSON.parse(cached);
-      // Ensure we don't return an empty/error object from cache
       if (parsed && typeof parsed === 'object') {
         return { data: parsed, fromCache: true };
       }
@@ -105,21 +103,13 @@ export const callLLM = async (
                 format: 'json',
               }),
             }),
-            25000 // Give it longer to try loading into RAM
+            50000 // Give it longer (50s) to run on CPU machines
           ) as Response;
           if (attempt.ok) { 
             localRes = attempt; 
             break; 
-          } else {
-            const errTxt = await attempt.text();
-            throw new Error(`Ollama Error (${attempt.status}): ${errTxt}`);
           }
-        } catch (err: any) { 
-          if (!localRes && err.message.includes('Ollama Error')) {
-            throw err; // strictly throw the OOM memory error immediately
-          }
-          continue; 
-        }
+        } catch (err: any) { continue; }
       }
       if (!localRes) throw new Error('Ollama connection completely failed.');
       const json = await localRes.json();
@@ -146,16 +136,29 @@ export const callLLM = async (
 
       if (!res.ok) throw new Error(`Cloud API error: ${res.status}`);
       const json = await res.json();
-      rawText = json.content[0].text;
+      rawText = json.content?.[0]?.text || '';
     }
 
     // ── PARSE JSON RESPONSE ───────────────────────────────────
-    const clean = rawText
+    // Some models (especially local/small ones) wrap the result in conversation.
+    // We try to extract the first/largest JSON object or array.
+    const extractJSON = (txt: string) => {
+      const match = txt.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+      return match ? match[0] : txt;
+    };
+
+    const clean = extractJSON(rawText)
       .replace(/```json/g, '')
       .replace(/```/g, '')
       .trim();
 
-    const parsed = JSON.parse(clean);
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch (e) {
+      console.warn('AI JSON Parse Failed. Raw:', rawText);
+      throw new Error('LLM_PARSE_ERROR');
+    }
 
     // ── SAVE TO CACHE ─────────────────────────────────────────
     localStorage.setItem(cacheKey, JSON.stringify(parsed));
@@ -163,12 +166,16 @@ export const callLLM = async (
     return { data: parsed, fromCache: false };
 
   } catch (err: any) {
-
-    // ── ERROR HANDLING ────────────────────────────────────────
     if (err.message === 'LLM_TIMEOUT') {
       return {
         data: null, fromCache: false, error: 'timeout',
         message: 'AI took too long to respond. Click Regenerate.',
+      };
+    }
+    if (err.message === 'LLM_PARSE_ERROR') {
+      return {
+        data: null, fromCache: false, error: 'parse',
+        message: 'AI returned invalid data format. Please try again.',
       };
     }
 
@@ -180,17 +187,8 @@ export const callLLM = async (
       return {
         data: null, fromCache: false, error: 'offline',
         message: AI_MODE === 'local'
-          ? 'Local AI offline. Install Ollama on this device: ollama.com/download — then run: OLLAMA_ORIGINS=* ollama serve'
+          ? 'Local AI offline. Ensure Ollama/Cloud-Node is running and reachable.'
           : 'Cloud AI unreachable. Check API key or network.',
-      };
-    }
-
-    if (err instanceof SyntaxError) {
-      return {
-        data: null,
-        fromCache: false,
-        error: 'parse',
-        message: 'AI returned unexpected format. Click Regenerate.',
       };
     }
 
@@ -198,7 +196,7 @@ export const callLLM = async (
       data: null,
       fromCache: false,
       error: 'unknown',
-      message: 'AI error. Click Regenerate to try again.',
+      message: `AI error: ${err.message || 'Unknown infrastructure disruption'}.`,
     };
   }
 };
@@ -210,10 +208,9 @@ export const checkLLMStatus = async (): Promise<{
   message: string;
 }> => {
   if (AI_MODE === 'local') {
-    // BUG 5 FIX: try both localhost and 127.0.0.1
     for (const url of LOCAL_STATUS_URLS) {
       try {
-        const res = await withTimeout(fetch(url), 3000) as Response;
+        const res = await withTimeout(fetch(url), 2000) as Response;
         if (res.ok) return {
           online: true,
           mode: 'Local Ollama',
@@ -227,9 +224,9 @@ export const checkLLMStatus = async (): Promise<{
       message: '🔴 Local AI Offline',
     };
   } else {
-    const configured = CLOUD_API_KEY !== 'PASTE_API_KEY_HERE';
+    const configured = CLOUD_API_KEY && CLOUD_API_KEY !== 'PASTE_API_KEY_HERE';
     return {
-      online: configured,
+      online: !!configured,
       mode: 'Cloud AI',
       message: configured ? 'Cloud AI Connected' : 'API Key not configured',
     };
@@ -245,7 +242,6 @@ export const clearLLMCache = () => {
 
 export const getLLMMode = () => AI_MODE;
 
-// ─── BACKWARDS COMPAT: pingLLM (used in AppHeader) ──────────
 /** @deprecated Use checkLLMStatus() */
 export const pingLLM = async (): Promise<boolean> => {
   const status = await checkLLMStatus();

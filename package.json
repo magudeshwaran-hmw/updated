@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:ui": "vite",
-    "server": "node server.cjs",
+    "server": "node server-postgres.cjs",
     "ollama:serve": "set OLLAMA_ORIGINS=* && ollama serve",
     "ollama:pull": "ollama pull llama3",
     "dev": "concurrently \"npm run dev:ui\" \"npm run server\" \"npm run ollama:serve\"",
@@ -62,8 +62,8 @@
     "express": "^5.2.1",
     "input-otp": "^1.4.2",
     "lucide-react": "^0.462.0",
-    "mssql": "^12.2.1",
     "next-themes": "^0.3.0",
+    "pg": "^8.20.0",
     "react": "^18.3.1",
     "react-chartjs-2": "^5.3.1",
     "react-day-picker": "^8.10.1",
