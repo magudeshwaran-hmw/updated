@@ -1,4 +1,4 @@
-1-	Rename Intelligence Sync - > Smart Skill Intelligence Sync
+1-	Rename Intelligence Sync (in the evalution journey) - > Smart Skill Intelligence Sync
 2-	Deep Scanning of Resume -> Remove ‘technical history ‘
 3-	In the workflow diagram, show skills as part of domain, technology, automation, tools, categories
 4-	Certificate Credits -> Certification Credits 
