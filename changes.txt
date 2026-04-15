@@ -1,0 +1,17 @@
+1-	Rename Intelligence Sync - > Smart Skill Intelligence Sync
+2-	Deep Scanning of Resume -> Remove ‘technical history ‘
+3-	In the workflow diagram, show skills as part of domain, technology, automation, tools, categories
+4-	Certificate Credits -> Certification Credits 
+5-	Finalise your profile -> Update your profile/resume
+6-	Platform Portal -> ZENSkill/ZENMatrix 
+7-	Growth Intelligence -> Will share this when I see your screen
+8-	Curated Roles - > Disable -> WIP 
+9-	High impact jobs - > Change to Right jobs 
+10-	Enable Single Sign on – U should be able to login once in RPG, and then log on to any app including ZenSkill with the same ID.
+11-	To edit /add skills – There should be an option/question “ Do you want to add more skills/projects?”
+12-	Add another tab or sub tab -> Other Achievements /Awards (Silver/gold)
+13-	Duplication of employee should be checked – When an admin adds an employee, the portal should not allow addition of the same employee again.
+14-	Resume reupload button and confirm and save buttons – fix the button sizes. Also add another option, to upload resume manually (where u have to fix gaps in the resume and then add)
+15-	While displaying gaps in the resume – Add rule – To give direct references only and not to generate inferences 
+16-	Resume Formatter – Have the same workflow – Upload resume, fetch/edit skills/projects/education, if need be, and then format .
+17-	Open SRFs information attached. It should match the skills with this open SRFs and generate a percentage of matching .
